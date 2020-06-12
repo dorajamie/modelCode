@@ -211,16 +211,16 @@ class ASModel(nn.Module):
                 pprint.pprint("exceed part punishment:%f" % exceed_p)
                 punish = punish + exceed_p
 
-                child_range = (children_embedding_h - children_embedding_l).sum(0)
-                parent_range = parent_embedding_h - parent_embedding_l
+                # child_range = (children_embedding_h - children_embedding_l).sum(0)
+                # parent_range = parent_embedding_h - parent_embedding_l
+                #
+                # gap_p = (parent_range - child_range).sum()
 
-                gap_p = (parent_range - child_range).sum()
-
-                # gap_p_1 = children_embedding_l - torch.add(parent_embedding_l, self.single_circle_range)
-                # gap_p_2 = torch.add(parent_embedding_h, self.single_circle_range) - children_embedding_h
-                # gap_p = torch.where(gap_p_1 > 0, gap_p_1, zero_base_batch).sum() \
-                #         + torch.where(gap_p_2 > 0, gap_p_2, zero_base_batch).sum()
-                # gap_p = gap_p * self.gap_punishment_ratio
+                gap_p_1 = children_embedding_l - torch.add(parent_embedding_l, self.single_circle_range)
+                gap_p_2 = torch.add(parent_embedding_h, self.single_circle_range) - children_embedding_h
+                gap_p = torch.where(gap_p_1 > 0, gap_p_1, zero_base_batch).sum() \
+                        + torch.where(gap_p_2 > 0, gap_p_2, zero_base_batch).sum()
+                gap_p = gap_p * self.gap_punishment_ratio
                 pprint.pprint("gap part punishment:%f" % gap_p)
                 if gap_p > 0:
                     punish = punish + gap_p
