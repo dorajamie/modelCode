@@ -1,0 +1,5 @@
+.DS_Store
+.idea
+*.npy
+*.log
+*.pyc
