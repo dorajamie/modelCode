@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader
 
 
 class ASModel(nn.Module):
-    def __init__(self,tree, tree_height, all_leaves,args):
+    def __init__(self,tree, graph, tree_height, all_leaves,args):
         super(ASModel, self).__init__()
         self.tree = tree
         self.tree_height = tree_height
@@ -31,8 +31,8 @@ class ASModel(nn.Module):
         self.circle_margin = args.circle_margin
         self.negative_sample_size = args.negative_sample_size
 
-        self.exceed_punishment_ratio = 0.25
-        self.gap_punishment_ratio = 0.25
+        self.exceed_punishment_ratio = 0.2
+        self.gap_punishment_ratio = 0.5
         self.overlap_punishment_ratio = 1 - self.exceed_punishment_ratio - self.gap_punishment_ratio
 
         # scale each circle by circle_x times
@@ -201,14 +201,22 @@ class ASModel(nn.Module):
                 )
                 children_embedding_l, children_embedding_h = torch.split(children_embedding, self.single_dim, dim=1)
 
-                zero_base_batch = torch.zeros(children_embedding_l.size())
+                zero_base_batch  = torch.zeros(children_embedding_l.size())
                 zero_base_line = torch.zeros(parent_embedding_l.size())
                 exceed_p_1 = torch.add(parent_embedding_l, self.single_circle_range) - children_embedding_l
                 exceed_p_2 = children_embedding_h - torch.add(parent_embedding_h, self.single_circle_range)
+
+                # 子节点的上界未达到父节点的下界、子节点的下界超过父节点的上界
+                exceed_p_1_1 = children_embedding_l - torch.add(parent_embedding_h, self.single_circle_range)
+                exceed_p_2_2 = torch.add(parent_embedding_l,self.single_circle_range) - children_embedding_h
+
                 exceed_p = torch.where(exceed_p_1 > 0, exceed_p_1, zero_base_batch).sum() \
-                           + torch.where(exceed_p_2 > 0, exceed_p_2, zero_base_batch).sum()
+                           + torch.where(exceed_p_2 > 0, exceed_p_2, zero_base_batch).sum() \
+                           + torch.where(exceed_p_1_1 > 0, exceed_p_1_1, zero_base_batch).sum() \
+                           + torch.where(exceed_p_2_2 > 0, exceed_p_2_2, zero_base_batch).sum()
+
                 exceed_p = exceed_p * self.exceed_punishment_ratio
-                pprint.pprint("exceed part punishment:%f" % exceed_p)
+                # pprint.pprint("exceed part punishment:%f" % exceed_p)
                 punish = punish + exceed_p
 
                 # child_range = (children_embedding_h - children_embedding_l).sum(0)
@@ -218,12 +226,13 @@ class ASModel(nn.Module):
 
                 gap_p_1 = children_embedding_l - torch.add(parent_embedding_l, self.single_circle_range)
                 gap_p_2 = torch.add(parent_embedding_h, self.single_circle_range) - children_embedding_h
+
                 gap_p = torch.where(gap_p_1 > 0, gap_p_1, zero_base_batch).sum() \
                         + torch.where(gap_p_2 > 0, gap_p_2, zero_base_batch).sum()
                 gap_p = gap_p * self.gap_punishment_ratio
-                pprint.pprint("gap part punishment:%f" % gap_p)
-                if gap_p > 0:
-                    punish = punish + gap_p
+                # pprint.pprint("gap part punishment:%f" % gap_p)
+
+                punish = punish + gap_p
 
                 # overlap
                 overlap_p = (children_embedding_l[0] - children_embedding_l[0]).sum()
@@ -242,7 +251,7 @@ class ASModel(nn.Module):
 
                 overlap_p = overlap_p * self.overlap_punishment_ratio
 
-                pprint.pprint("overlap part punishment:%f" % overlap_p)
+                # pprint.pprint("overlap part punishment:%f" % overlap_p)
 
                 punish += overlap_p
             return punish
@@ -276,7 +285,7 @@ class ASModel(nn.Module):
         # debug: use the same samples as the h-mode
         punish_v = model(positive_sample_bros_path, mode='v_1')
 
-        alpha = 0.4
+        alpha = 0
         loss = alpha * punish_h + (1-alpha) * punish_v
 
         loss.backward()

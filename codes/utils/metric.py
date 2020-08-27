@@ -1,0 +1,176 @@
+#!/usr/bin/python
+# -*- coding: UTF-8 -*-
+import math
+import os
+import sys
+import time
+import networkx as nx
+import json
+import numpy as np
+import matplotlib.mlab as mlab
+import matplotlib.pyplot as plt
+from operator import itemgetter
+from matplotlib import colors
+from matplotlib.patches import Ellipse, Circle
+from matplotlib.backends.backend_pdf import PdfPages
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import scale
+from codes.utils.filewriter import write_to_file
+import codes.utils.data_etl as etl
+
+
+
+class Metric(object):
+
+
+
+
+
+
+
+
+    @staticmethod
+    def classification(X, params):
+        """
+        分类任务
+        :param X:所有叶子节点的坐标
+        :param params:度量参数
+        :return:
+        """
+        # X_scaled = scale(X)     # 均值化
+        # y = dh.load_ground_truth(os.path.join(DATA_PATH, params["ground_truth"]))
+        # acc = 0.0
+        # for _ in xrange(params["times"]):
+        #      X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size = params["test_size"], stratify = y)
+        #      clf = getattr(mll, params["classification_func"])(X_train, y_train)
+        #      acc += mll.infer(clf, X_test, y_test)[1]
+        # acc /= float(params["times"])
+        # return acc
+        pass
+
+    @staticmethod
+    def display(embedding):
+        embedding = np.around(embedding, decimals=5)
+        lower = embedding[:,:8]
+        higher = embedding[:,8:]
+        # print(lower)
+        # print(higher)
+        # exit(1)
+        diff = higher - lower
+
+        displayfile = '../res/metric_display.txt'
+
+        tree, total_level, all_leaves = etl.prepare_tree('../data/tree2_hamilton')
+
+        tmp = {}
+        for i in range(len(diff)):
+            tmpl = []
+            l = diff[i].tolist()
+            for each in l:
+                tmpl.append('%.03f'%each)
+            s = str(i) + ' ' + str(json.dumps(tmpl)) + "\r\n"
+            tmp[i] = s
+            # write_to_file(displayfile, s)
+
+        write_to_file(displayfile, tmp[2618])
+        write_to_file(displayfile, "\r\n\r\n")
+        secondLevel = tree[2618].direct_children
+        for i in secondLevel:
+            write_to_file(displayfile, tmp[i])
+        write_to_file(displayfile, "\r\n\r\n")
+        thirdLevel = tree[secondLevel[0]].direct_children
+        for j in thirdLevel:
+            write_to_file(displayfile, tmp[j])
+        write_to_file(displayfile, "\r\n\r\n")
+        fourthLevel = tree[thirdLevel[0]].direct_children
+        for k in fourthLevel:
+            write_to_file(displayfile, tmp[k])
+
+    @staticmethod
+    def parseData():
+        target = 'georgetown'
+
+        flagFile = '../data/flag_'+target+'.txt'
+
+        tree, total_level, all_leaves = etl.prepare_tree('../data/tree2_'+target)
+
+        flag = {}
+        with open(flagFile, "r") as f:
+            for line in f:
+                line = line.strip()
+                if len(line) == 0:
+                    continue
+                items = line.split()
+                if len(items) != 2:
+                    continue
+                if items[1] in flag.keys():
+                    flag[items[1]].append(items[0])
+                else:
+                    flag[items[1]] = [items[0]]
+        print(flag['3'])
+        flagCnt = {}
+        for k,v in flag.items():
+            # print(k)
+            # print(v)
+            flagCnt[k] = len(v)
+        print(flagCnt)
+
+    @staticmethod
+    def displayTrainRes(embedding):
+        embedding = np.around(embedding, decimals=5)
+        total = len(embedding)
+        for i in range(total):
+            index = total - i - 1
+            print(index)
+            print(embedding[index])
+            # print("\r\n")
+
+    @staticmethod
+    def visualization(embedding):
+        pdf_output = '../res/vis.pdf'
+
+        fig = plt.figure(figsize=(10, 9.2))
+        ax = fig.add_subplot(1, 1, 1)
+
+        for each in embedding:
+
+            start = each[0]
+            end = each[1]
+
+            tmp = start
+            xx = []
+            yy = []
+            while tmp < end:
+                x = tmp * math.cos(tmp/10)
+                y = tmp * math.sin(tmp/10)
+                x = float(x)
+                y = float(y)
+                xx.append(x)
+                yy.append(y)
+                tmp += math.pi * 0.0001
+            ax.plot(xx, yy, label='debug', linewidth=2)
+
+        plt.show()
+
+        pp = PdfPages(pdf_output)
+        pp.savefig(fig)
+        pp.close()
+
+    @staticmethod
+    def drawG():
+        graph = etl.prepare_graph('../data/edges_hamilton.txt')
+
+        fig = plt.figure(figsize=(15, 15))
+
+
+        nx.draw(
+            graph,
+            with_labels=False,
+            pos = nx.random_layout(graph),
+            node_size=10,
+
+        )
+        # nx.draw_networkx(graph)
+
+
+        plt.show()

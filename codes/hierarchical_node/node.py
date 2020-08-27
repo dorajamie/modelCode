@@ -1,10 +1,11 @@
 class Node:
-    def __init__(self, id, direct_children, all_children, path, level):
+    def __init__(self, id, direct_children, all_children, path, level, leaves):
         self.id = id
         self.direct_children = direct_children
         self.all_children = all_children
         self.path = path
         self.level = level
+        self.leaves = leaves
 
     def __str__(self):
         str = "id: %s\n" % self.id
