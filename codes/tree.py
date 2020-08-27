@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader
 
 
 class TreeModel(nn.Module):
-    def __init__(self,omega,args,parent,children,res,leavesCnt):
+    def __init__(self,omega,args,parent,children,res,leavesCnt,device):
         super(TreeModel, self).__init__()
         self.omega = omega
         self.args = args
@@ -106,7 +106,7 @@ class TreeModel(nn.Module):
         # print('self.omega_sim_np')
         # print(np.around(self.omega_sim_np,decimals=2))
 
-        self.omega_sim =  TreeModel.clip_by_min(torch.from_numpy(self.omega_sim_np))
+        self.omega_sim =  TreeModel.clip_by_min(torch.from_numpy(self.omega_sim_np)).to(device)
         self.omegaNormed = self.omega_sim / TreeModel.clip_by_min(torch.norm(self.omega_sim))
         # self.omega_sim =  TreeModel.clip_by_min(self.omega_sim)
         # print('omega_sim')

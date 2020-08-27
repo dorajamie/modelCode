@@ -129,6 +129,7 @@ class BidirectionalOneShotIterator(object):
     def __init__(self, dataloader):
         self.iterator = self.one_shot_iterator(dataloader)
 
+
     def __next__(self):
         data = next(self.iterator)
         return data

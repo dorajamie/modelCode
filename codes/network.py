@@ -40,7 +40,7 @@ class NetworkModel(nn.Module):
         self.node_embedding = nn.Parameter(embedding, requires_grad=True)
 
 
-    def forward(self, ids, emb):
+    def forward(self, data):
         '''
         Forward function that calculate the score of a batch of triples.
         In the 'single' mode, sample is a batch of triple.
@@ -51,7 +51,8 @@ class NetworkModel(nn.Module):
         in their triple ((head, relation) or (relation, tail)).
         '''
 
-
+        ids = data[0]
+        emb = data[1]
 
         emb_selected = torch.index_select(
             self.node_embedding,
@@ -76,9 +77,9 @@ class NetworkModel(nn.Module):
         '''
         model.train()
         optimizer.zero_grad()
-        ids, emb = next(train_iterator)
+        data = next(train_iterator)
 
-        loss = model(ids, emb)
+        loss = model(data)
         loss.backward()
         optimizer.step()
         return loss,model.node_embedding

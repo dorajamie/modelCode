@@ -35,7 +35,7 @@ def parse_args(args=None):
         description='Train the Archimedean Spiral Model'
     )
 
-    parser.add_argument('--cuda', action='store_true', help='use GPU')
+    parser.add_argument('--usecuda', action='store_true', help='use GPU')
     parser.add_argument('--do_train', action='store_true')
     parser.add_argument('--data_path', type=str, default=None)
     parser.add_argument('--network_path', type=str, default=None)
@@ -58,7 +58,7 @@ def parse_args(args=None):
 
 
 
-def train_dfs(curNode, res, args, tree, leavesMatrix):
+def train_dfs(curNode, res, args, tree, leavesMatrix,device):
     # children, commonSimMatrix = etl.get_branch_common_similarity_matrix(curNode, tree, leavesMatrix)
     children, simMartrix = etl.get_nodes_sim_based_on_matrix(curNode, tree, leavesMatrix, 100)
     # commonSimMatrixNorm = commonSimMatrix
@@ -78,9 +78,6 @@ def train_dfs(curNode, res, args, tree, leavesMatrix):
             children = children,
             args=args
         )
-
-        if args.cuda:
-            networkModel = networkModel.cuda()
 
 
         # load the network training dataset
@@ -122,9 +119,10 @@ def train_dfs(curNode, res, args, tree, leavesMatrix):
             children= children,
             res = res,
             args=args,
-            leavesCnt=childLeavesCnt
+            leavesCnt=childLeavesCnt,
+            device=device
         )
-
+        treeModel.to(device)
         learningRate2 = args.learning_rate
         optimizer2 = torch.optim.Adam(
             filter(lambda p: p.requires_grad, treeModel.parameters()),
@@ -186,6 +184,11 @@ def main(args):
     if (args.hidden_dim % 2 != 0):
         raise ValueError('hidden_error')
     args.single_dim = args.hidden_dim // 2
+
+    if args.usecuda:
+        device = "cuda:2" if torch.cuda.is_available() else "cpu"
+    else:
+        device = "cpu"
     '''
     prepare the dataset:
     tree: all of the nodes in tree including leaves and none-leaf node, each node object is in format of :
@@ -219,7 +222,7 @@ def main(args):
     # calc the graph similarity
     leaves_similarity = etl.get_leaves_similarity(graph)
 
-    train_dfs(root,res, args, tree, leaves_similarity)
+    train_dfs(root,res, args, tree, leaves_similarity,device)
 
     res_output = os.path.join(args.res_path, "res_"+str(int(time.time())))
 
