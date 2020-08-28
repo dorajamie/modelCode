@@ -11,9 +11,10 @@ import math
 import os
 import pprint
 import time
-
+import sys
 import torch
-
+ROOT_DIR='/home/lduan/modelCode'
+sys.path.append(ROOT_DIR)
 from codes.network import NetworkModel
 from codes.tree import TreeModel
 from codes.utils.datahandler import DatasetH, networkDataset, networkLeavesDataset
@@ -122,17 +123,18 @@ def train_dfs(curNode, res, args, tree, leavesMatrix,device):
             leavesCnt=childLeavesCnt,
             device=device
         )
+       
         treeModel.to(device)
         learningRate2 = args.learning_rate
         optimizer2 = torch.optim.Adam(
             filter(lambda p: p.requires_grad, treeModel.parameters()),
-            lr=0.005
+            lr=0.01
         )
 
         treePreLoss = float('inf')
         for step in range(0, args.max_steps):
             treeLossNumeric,embedding = treeModel.train_step(treeModel, optimizer2,step)
-            embTmpRes = embedding.data
+            embTmpRes = embedding.data.cpu()
 
 
             # if torch.isnan(treeLossNumeric):
@@ -171,7 +173,7 @@ def train_dfs(curNode, res, args, tree, leavesMatrix,device):
     # exit(1)
     for child in children:
         if tree[child].direct_children:
-            train_dfs(child, res, args, tree, leavesMatrix)
+            train_dfs(child, res, args, tree, leavesMatrix, device)
 
 def main(args):
     """

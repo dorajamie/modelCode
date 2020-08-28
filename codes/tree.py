@@ -25,7 +25,7 @@ class TreeModel(nn.Module):
         super(TreeModel, self).__init__()
         self.omega = omega
         self.args = args
-        self.leavesCnt = torch.div(torch.Tensor(leavesCnt), sum(leavesCnt)).unsqueeze(1)
+        self.leavesCnt = torch.div(torch.Tensor(leavesCnt), sum(leavesCnt)).unsqueeze(1).to(device)
         # exceed_part
         self.exceed_punishment_ratio = 0.2
         # gap_part
@@ -45,15 +45,15 @@ class TreeModel(nn.Module):
         # dimensions
         self.hidden_dim = self.args.hidden_dim
         self.single_dim = self.args.single_dim
-
+        self.device = device
         # init the nodes_num
         final_embedding = torch.zeros(self.nodes_num, self.hidden_dim)
 
 
         self.parent_embedding = res[parent]
         parent_embedding_l, parent_embedding_h = torch.chunk(self.parent_embedding, 2, dim=0)
-        self.parent_embedding_l = parent_embedding_l
-        self.parent_embedding_h = parent_embedding_h
+        self.parent_embedding_l = parent_embedding_l.to(device)
+        self.parent_embedding_h = parent_embedding_h.to(device)
 
         self.level_range =  max(parent_embedding_h) - min(parent_embedding_l)
 
@@ -187,10 +187,10 @@ class TreeModel(nn.Module):
         overlap_pre = min_h - max_l
 
         filter = torch.ones((self.nodes_num, self.nodes_num)) - torch.eye((self.nodes_num))
-        filter = filter.repeat(self.single_dim, 1)
+        filter = filter.repeat(self.single_dim, 1).to(self.device)
         overlap_ = torch.mul(overlap_pre, filter)
         # loss_overlap = torch.where(overlap_ > 0, overlap_, torch.Tensor([0])).sum()
-        part1 = torch.where(overlap_ > 0, overlap_, torch.Tensor([0]))
+        part1 = torch.where(overlap_ > 0, overlap_, torch.Tensor([0]).to(self.device))
         # print('part1')
         # print(part1)
         gapDiff = embDiff.t().reshape(children_embedding_l.numel(), 1)
@@ -269,6 +269,7 @@ class TreeModel(nn.Module):
         if steps % 1000 ==0:
             pass
             print('********************')
+            print(self.device)
             print('loss_sim:%f' % loss_sim)
             print('loss_exceed:%f' % loss_exceed)
             print('loss_extra:%f' % loss_extra)
