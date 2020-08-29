@@ -295,10 +295,10 @@ class TreeModel(nn.Module):
 
 
         loss = \
-            1 * loss_sim + \
-            5 * loss_extra +  \
-            2 * loss_exceed + \
-            9 * loss_overlap + \
+            0.0011 * loss_sim + \
+            20 * loss_extra +  \
+            3 * loss_exceed + \
+            12 * loss_overlap + \
             6 * loss_positive
 
 
