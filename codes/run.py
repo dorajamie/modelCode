@@ -47,7 +47,7 @@ def parse_args(args=None):
 
     parser.add_argument('-n', '--negative_sample_size', default=1, type=int)
     parser.add_argument('--warm_up_steps', default=None, type=int)
-    parser.add_argument('-d', '--hidden_dim', default=32, type=int)
+    parser.add_argument('-d', '--hidden_dim', default=2, type=int)
     parser.add_argument('--cpu_num', type=int, default=1)
     parser.add_argument('-cm','--circle_margin', type=float)    # 每圈的边界
 
@@ -71,15 +71,12 @@ def train_dfs(curNode, res, args, tree, leavesMatrix,device):
     if len(children) == 1:
         res[children[0]] = res[curNode] + args.single_circle_range
     else:
-
         simMatrixNorm = etl.normalize_adj_matrix(simMartrix)
-
         # init the network model
         networkModel = NetworkModel(
             children = children,
             args=args
         )
-
 
         # load the network training dataset
         networkDataLoader = DataLoader(
@@ -128,7 +125,7 @@ def train_dfs(curNode, res, args, tree, leavesMatrix,device):
         learningRate2 = args.learning_rate
         optimizer2 = torch.optim.Adam(
             filter(lambda p: p.requires_grad, treeModel.parameters()),
-            lr=0.01
+            lr=0.0005
         )
 
         treePreLoss = float('inf')
@@ -175,51 +172,62 @@ def train_dfs(curNode, res, args, tree, leavesMatrix,device):
         if tree[child].direct_children:
             train_dfs(child, res, args, tree, leavesMatrix, device)
 
+
+def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCounter):
+    # Return, the leaf level and needn't process.
+    if curLayer > len(layerCounter) - 2 :
+        return
+    print('Training layer No.'+str(curLayer))
+
+    
+
+
+
+
 def main(args):
     """
-    主函数
+    training entrance
     :param args:
     :return:
     """
+    # Parameters verifying.
     if (not args.do_train):
         raise ValueError('error.')
     if (args.hidden_dim % 2 != 0):
         raise ValueError('hidden_error')
     args.single_dim = args.hidden_dim // 2
 
+    # Select a device, cpu or gpu.
     if args.usecuda:
         device = "cuda:2" if torch.cuda.is_available() else "cpu"
     else:
         device = "cpu"
-    '''
-    prepare the dataset:
-    tree: all of the nodes in tree including leaves and none-leaf node, each node object is in format of :
-        [
-            all_children: a set of all children of the current node,
-            direct_children: a set of one-hop children of the current node,
-            id: the id of the current node,
-            level: the depth of the current node in the tree,
-            path: a list of nodes in the order of from the root to the current node
-        ]
-    total_level: the height of the tree,
-    all_leaves: all the leaves in the tree    
-    '''
 
-    tree, total_level,all_leaves = etl.prepare_tree(args.data_path)
-
+    # Load the tree and some properties of the tree.
+    tree, total_level, all_leaves = etl.prepare_tree(args.data_path)
+    # load the graph
     graph = etl.prepare_graph(args.network_path)
-
-    # specify the root node
+    # Define the root node
     root = len(tree) - 1
+    # Calc the graph similarity, i.e. the matrix \capA in paper.
+    leaves_similarity = etl.get_leaves_similarity(graph)
+
+    # Initialize the result and fix the root node's embedding.
     root_embedding_lower = torch.zeros(1, args.single_dim)
     root_embedding_upper = args.single_circle_range * torch.ones(1, args.single_dim)
     root_embedding = torch.cat((root_embedding_lower, root_embedding_upper), 1)[0]
-
-    # subnodes_embedding =
-
     res = torch.zeros(len(tree),args.hidden_dim)
-
     res[root] = root_embedding
+
+    # Initialize the layer dict containing lists of nodes of each layer.
+    layerCounter = [[] for i in range(total_level)]
+    for node in tree:
+        layerCounter[node.level - 1].append(node.id)
+
+    # Train HASNE layer by layer.
+    layerWiseTraining(0, res, args, tree, leaves_similarity, device, layerCounter)
+
+
 
     # calc the graph similarity
     leaves_similarity = etl.get_leaves_similarity(graph)
@@ -233,76 +241,7 @@ def main(args):
 
 
 
-    # whole_tree_similarity = etl.get_tree_based_similarity(tree, leaves_similarity )
-    #
-    # # init the model
-    # model = ASModel(
-    #     tree = tree,
-    #     graph = graph,
-    #     tree_height=total_level,
-    #     all_leaves = all_leaves,
-    #     args = args
-    # )
-    #
-    # if args.cuda:
-    #     model = model.cuda()
-    #
-    # if args.do_train:
-    #     # Set training dataloader iterator of the horizontal(global) direction.
-    #     train_dataloader_h = DataLoader(
-    #         DatasetH(all_leaves,tree,graph, args,total_level),
-    #         batch_size=args.batch_size,
-    #         shuffle=True,
-    #         num_workers=max(1, args.cpu_num // 2),
-    #         # num_workers=1,
-    #         collate_fn=DatasetH.collate_fn
-    #     )
-    #     train_iterator_h = BidirectionalOneShotIterator(train_dataloader_h)
-    #
-    #     # Set training dataloader iterator of the vertical(local) direction.
-    #     train_dataloader_v = DataLoader(
-    #         DatasetV(all_leaves, tree, args, total_level),
-    #         batch_size=args.batch_size,
-    #         shuffle=True,
-    #         num_workers=max(1, args.cpu_num // 2),
-    #         # num_workers=1,
-    #         collate_fn=DatasetV.collate_fn
-    #     )
-    #     train_iterator_v = BidirectionalOneShotIterator(train_dataloader_v)
-    #
-    #     # Define the optimizer
-    #     current_learning_rate = args.learning_rate
-    #     optimizer = torch.optim.Adam(
-    #         filter(lambda p: p.requires_grad, model.parameters()),
-    #         lr=current_learning_rate
-    #     )
-    #
-    #     if args.warm_up_steps:
-    #         warm_up_steps = args.warm_up_steps
-    #     else:
-    #         warm_up_steps = args.max_steps // 2
-    #
-    #     init_step = 0
-    #
-    #     logging.info('learning_rate = %d' % current_learning_rate)
-    #
-    #     training_logs = []
-    #
-    #     # Training Loop
-    #     for step in range(init_step, args.max_steps):
-    #
-    #         log = model.train_step(model, optimizer,train_iterator_v, train_iterator_h)
-    #         print(log)
-    #         training_logs.append(log)
-    #
-    #         if step >= warm_up_steps:
-    #             current_learning_rate = current_learning_rate / 10
-    #             logging.info('Change learning_rate to %f at step %d' % (current_learning_rate, step))
-    #             optimizer = torch.optim.Adam(
-    #                 filter(lambda p: p.requires_grad, model.parameters()),
-    #                 lr=current_learning_rate
-    #             )
-    #             warm_up_steps = warm_up_steps * 3
+
 
 
 if __name__ == '__main__':

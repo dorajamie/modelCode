@@ -31,19 +31,28 @@ def metric(params):
             Metric.visualization(embedding)
         elif metric['metric_func'] == 'drawG':
             Metric.drawG()
-    write_to_file(res_path, json.dumps(ret))
+        elif metric['metric_func'] == 'poincare':
+            Metric.poincareDraw()
+        elif metric['metric_func'] == 'drawAS':
+            Metric.drawAS()
+        elif metric['metric_func'] == 'drawPoincare':
+            Metric.drawPoincare()
+        elif metric['metric_func'] == 'drawGNE':
+            Metric.drawGNE()
+
+    # write_to_file(res_path, json.dumps(ret))
 
 
 
 
 if __name__ == "__main__":
-    inputFileName = 'res_vis_hamiton_full'
+    inputFileName = 'res_1598626250'
     params = {
         'res_input':'../res/'+inputFileName,
         'metric_output':'../res/metric_'+inputFileName,
         'metric_function':[
             {
-                'metric_func':'drawG'
+                'metric_func':'drawGNE'
             },
         ],
     }

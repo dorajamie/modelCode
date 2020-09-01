@@ -10,6 +10,8 @@ import numpy as np
 import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
 from operator import itemgetter
+
+import torch
 from matplotlib import colors
 from matplotlib.patches import Ellipse, Circle
 from matplotlib.backends.backend_pdf import PdfPages
@@ -23,8 +25,45 @@ import codes.utils.data_etl as etl
 class Metric(object):
 
 
+    @staticmethod
+    def drawAS():
+
+        pdf_output = '../res/as.pdf'
+
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(1, 1, 1)
+
+        xx = []
+        yy = []
+        r = 2
+        stop = 3.3 * 2 * math.pi
+        tmp = 0
+        while tmp < stop:
+
+            x = tmp * math.cos(tmp )
+            y = tmp * math.sin(tmp )
+            x = float(x)
+            y = float(y)
+            xx.append(x)
+            yy.append(y)
+            tmp = tmp + 0.001 * math.pi
+        # print(xx)
+        ax.plot(xx, yy, label='debug', linewidth=2)
 
 
+
+
+        plt.show()
+
+        pp = PdfPages(pdf_output)
+        pp.savefig(fig)
+        pp.close()
+
+
+    @staticmethod
+    def poincareDraw():
+        res = torch.load("../res/mammals_2_best_poincare.pth")
+        print(res)
 
 
 
@@ -127,7 +166,7 @@ class Metric(object):
 
     @staticmethod
     def visualization(embedding):
-        pdf_output = '../res/vis.pdf'
+        pdf_output = '../res/vis_mammal.pdf'
 
         fig = plt.figure(figsize=(10, 9.2))
         ax = fig.add_subplot(1, 1, 1)
@@ -158,8 +197,8 @@ class Metric(object):
 
     @staticmethod
     def drawG():
-        graph = etl.prepare_graph('../data/edges_hamilton.txt')
-
+        graph = etl.prepare_graph('../data/tree2_mammal')
+        pdf_output = '../res/vis_mammal_defalut.pdf'
         fig = plt.figure(figsize=(15, 15))
 
 
@@ -167,10 +206,80 @@ class Metric(object):
             graph,
             with_labels=False,
             pos = nx.random_layout(graph),
-            node_size=10,
+            node_size=50,
 
         )
         # nx.draw_networkx(graph)
 
 
         plt.show()
+
+        pp = PdfPages(pdf_output)
+        pp.savefig(fig)
+        pp.close()
+
+    @staticmethod
+    def drawPoincare():
+        model = torch.load("../res/mammals_2_best.pth")
+        embeddings = model['embeddings']
+        pdf_output = '../res/vis_mammal_poincare.pdf'
+
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(1, 1, 1)
+
+        xx = []
+        yy = []
+
+        for each in embeddings:
+            x = each[0] * 1000
+            y = each[1] * 1000
+            x = float(x)
+            y = float(y)
+            xx.append(x)
+            yy.append(y)
+
+
+        ax.plot(xx, yy, label='debug', linewidth=1,color='k')
+
+        plt.show()
+
+        pp = PdfPages(pdf_output)
+        pp.savefig(fig)
+        pp.close()
+
+
+    @staticmethod
+    def drawGNE():
+
+        pdf_output = '../res/vis_mammal_GNE.pdf'
+
+
+
+        f = open('../res/new_train_res', encoding='utf-8')
+        content = f.read()  # 使用loads（）方法需要先读文件
+        dict = json.loads(content)
+        embeddings = dict['coordinates']
+
+
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(1, 1, 1)
+
+        xx = []
+        yy = []
+
+        for each in embeddings:
+            x = each[0] * 1
+            y = each[1] * 1
+            x = float(x)
+            y = float(y)
+            xx.append(x)
+            yy.append(y)
+        print(xx)
+        print(yy)
+        ax.plot(xx, yy, label='debug', linewidth=1, color='k')
+
+        plt.show()
+
+        pp = PdfPages(pdf_output)
+        pp.savefig(fig)
+        pp.close()

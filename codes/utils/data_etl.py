@@ -47,12 +47,15 @@ def prepare_graph(file_path):
 
 
 
+
+
 def prepare_tree(file_path):
     """
     准备数据
     :param file_path:
     :return:
     """
+    # g有向树图，n所有节点，m所有叶子节点
     g, n, m = build_hierarchical_tree(os.path.join(file_path))
 
     # n:num of total nodes; m:num of leaf nodes;
