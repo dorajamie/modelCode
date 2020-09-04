@@ -15,7 +15,7 @@ class HierarchyModel(nn.Module):
         super(HierarchyModel, self).__init__()
 
         self.args = args
-        self.tree = tree
+        self.tree = tree.to(device)
         self.childrenList = childrenList
         self.parentsList = parentsList
         self.childrenNodesNum = len(childrenList)
@@ -27,7 +27,7 @@ class HierarchyModel(nn.Module):
         self.curLayer = layer
         self.omega = omega
         self.parentDict = parentDict
-        self.res = res
+        self.res = res.to(device)
         # The number of children of each node in this layer.
         self.childrenNumOfEachParent = []
 
@@ -40,7 +40,7 @@ class HierarchyModel(nn.Module):
 
 
         # Initialize the embedding of the next layer.
-        layerEmbedding = torch.zeros(self.childrenNodesNum, self.hiddenDim)
+        layerEmbedding = torch.zeros(self.childrenNodesNum, self.hiddenDim).to(device)
         nn.init.uniform_(
             tensor=layerEmbedding,
             a=(self.circleRange * (layer + 1) ),
@@ -54,7 +54,7 @@ class HierarchyModel(nn.Module):
         self.childrenEmbedding = nn.Parameter(layerEmbedding, requires_grad=True)
 
         # Initialize the layer-based-distance dict for previous layer.
-        self.layerBasedRes = self.calcLayerBasedDist(layerBasedRes,res)
+        self.layerBasedRes = self.calcLayerBasedDist(layerBasedRes,self.res)
 
         # print('omega for all:')
         # print(self.omega)
@@ -132,7 +132,7 @@ class HierarchyModel(nn.Module):
         finalEmb4ids = torch.index_select(
             self.childrenEmbedding,
             dim=0,
-            index=torch.tensor(idIndexes)
+            index=torch.tensor(idIndexes).to(self.device)
         )
         # parentsEmbLower, parentsEmbHigher = torch.split(self.parentsEmbedding, self.singleDim, dim=1)
         resEmbLower, resEmbHigher = torch.split(self.res, self.singleDim, dim=1)
