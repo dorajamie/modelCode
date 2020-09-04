@@ -14,12 +14,13 @@ import time
 import sys
 import torch
 
-from codes.hierarchy import HierarchyModel
+
 
 ROOT_DIR='/home/lduan/modelCode'
 sys.path.append(ROOT_DIR)
 from codes.network import NetworkModel
 from codes.tree import TreeModel
+from codes.hierarchy import HierarchyModel
 from codes.utils.datahandler import networkDataset,treeDataset
 
 from codes.utils.datahandler import BidirectionalOneShotIterator
