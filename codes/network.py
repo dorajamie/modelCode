@@ -15,14 +15,14 @@ class NetworkModel(nn.Module):
         super(NetworkModel, self).__init__()
         self.args = args
         self.childrenList = children
-        embedding = torch.zeros( len(children) , self.args.hidden_dim)
+        embedding = torch.zeros( len(children) , self.args.hidden_dim_n)
         nn.init.uniform_(
             tensor=embedding,
             a=-1,
             b=1
         )
 
-        w = torch.zeros(self.args.hidden_dim, len(self.childrenList))
+        w = torch.zeros(self.args.hidden_dim_n, len(self.childrenList))
         nn.init.uniform_(
             tensor=w,
             a=-1,
@@ -60,12 +60,8 @@ class NetworkModel(nn.Module):
             index=torch.tensor(ids)
         )
         self.sof = torch.softmax(torch.mm(emb_selected, self.w) + self.b,  dim=0,dtype=torch.float)
-        # self.sof = torch.where(self.sof < 0, torch.tensor(1e-10), self.sof)
-        # self.sof = torch.where(self.sof > torch.tensor(1.0), torch.tensor(1), self.sof)
         self.sof = torch.clamp(self.sof, 1e-10, float('inf'))
-        # print(self.loss)
         self.loss = torch.mean(-torch.sum(torch.tensor(emb) * torch.log(self.sof), dim=1))
-        # print(self.loss)
 
         return self.loss
 

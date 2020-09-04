@@ -13,12 +13,15 @@ import pprint
 import time
 import sys
 import torch
+
+from codes.hierarchy import HierarchyModel
+
 ROOT_DIR='/home/lduan/modelCode'
 sys.path.append(ROOT_DIR)
 from codes.network import NetworkModel
 from codes.tree import TreeModel
-from codes.utils.datahandler import DatasetH, networkDataset, networkLeavesDataset
-from codes.utils.datahandler import DatasetV
+from codes.utils.datahandler import networkDataset,treeDataset
+
 from codes.utils.datahandler import BidirectionalOneShotIterator
 import codes.utils.data_etl as etl
 from torch.utils.data import DataLoader
@@ -48,6 +51,9 @@ def parse_args(args=None):
     parser.add_argument('-n', '--negative_sample_size', default=1, type=int)
     parser.add_argument('--warm_up_steps', default=None, type=int)
     parser.add_argument('-d', '--hidden_dim', default=2, type=int)
+    parser.add_argument('-dn', '--hidden_dim_n', default=16, type=int)
+    parser.add_argument('-dt', '--hidden_dim_t', default=2, type=int)
+
     parser.add_argument('--cpu_num', type=int, default=1)
     parser.add_argument('-cm','--circle_margin', type=float)    # 每圈的边界
 
@@ -58,131 +64,129 @@ def parse_args(args=None):
 
 
 
-
-def train_dfs(curNode, res, args, tree, leavesMatrix,device):
-    # children, commonSimMatrix = etl.get_branch_common_similarity_matrix(curNode, tree, leavesMatrix)
-    children, simMartrix = etl.get_nodes_sim_based_on_matrix(curNode, tree, leavesMatrix, 100)
-    # commonSimMatrixNorm = commonSimMatrix
-    childLeavesCnt = []
-    level = tree[curNode].level
-    for child in children:
-        childLeavesCnt.append(len(tree[child].leaves))
-
-    if len(children) == 1:
-        res[children[0]] = res[curNode] + args.single_circle_range
-    else:
-        simMatrixNorm = etl.normalize_adj_matrix(simMartrix)
-        # init the network model
-        networkModel = NetworkModel(
-            children = children,
-            args=args
-        )
-
-        # load the network training dataset
-        networkDataLoader = DataLoader(
-            networkDataset(curNode, tree, children, simMatrixNorm, args),
-            batch_size=args.batch_size,
-            shuffle=True,
-            num_workers=max(1, args.cpu_num // 2),
-            # num_workers=1,
-            # collate_fn=networkDataset.collate_fn,
-            collate_fn=lambda x:networkDataset.collate_fn(x,args.batch_size),
-            drop_last=False
-        )
-        trainIterator1 = BidirectionalOneShotIterator(networkDataLoader)
-
-        learningRate1 = args.learning_rate
-        optimizer1 = torch.optim.Adam(
-            filter(lambda p: p.requires_grad, networkModel.parameters()),
-            lr=learningRate1
-        )
-
-        preLoss = float('inf')
-        for step in range(0, args.max_steps):
-            loss,embeddingOmega = NetworkModel.train_step(networkModel, optimizer1, trainIterator1)
-            if step % 100 ==0 :
-                lossNumeric = loss.item()
-                print("Network node:%d, iterator is %d, loss is:%f" % ( curNode, step, lossNumeric))
-                if abs(lossNumeric - preLoss) < 0.01:
-                    break
-                else:
-                    preLoss = lossNumeric
-        print("Start training the tree......")
-        # project the embedding to the spiral
-        # init the tree model
-        # print(embeddingOmega.data.numpy())
-        treeModel = TreeModel(
-            omega=embeddingOmega.data.numpy(),
-            parent=curNode,
-            children= children,
-            res = res,
-            args=args,
-            leavesCnt=childLeavesCnt,
-            device=device
-        )
-       
-        treeModel.to(device)
-        learningRate2 = args.learning_rate
-        optimizer2 = torch.optim.Adam(
-            filter(lambda p: p.requires_grad, treeModel.parameters()),
-            lr=0.0005
-        )
-
-        treePreLoss = float('inf')
-        for step in range(0, args.max_steps):
-            treeLossNumeric,embedding = treeModel.train_step(treeModel, optimizer2,step)
-            embTmpRes = embedding.data.cpu()
-
-
-            # if torch.isnan(treeLossNumeric):
-
-
-            if step % 100 == 0 :
-
-                print("Tree node:%d, iterator is %d, loss is:%f" % ( curNode, step, treePreLoss))
-                # pprint.pprint(level)
-                if abs(treeLossNumeric - treePreLoss) < (level**4) * 0.0005:
-
-                    for k in children:
-                        pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
-                        # pprint.pprint(len(tree[k].leaves))
-                    # pprint.pprint(children)
-
-                    pprint.pprint(embTmpRes.numpy())
-                    l, h = torch.split(embTmpRes, args.single_dim, dim=1)
-                    pprint.pprint(np.around((h-l).numpy(),decimals=2))
-
-                    for indexer in range(len(children)):
-                        child = children[indexer]
-                        res[child] = embTmpRes[indexer]
-                    break
-                else:
-                    treePreLoss = treeLossNumeric
-
-            if step == args.max_steps -1 :
-                print('final')
-                pprint.pprint(embTmpRes.numpy())
-                l, h = torch.split(embTmpRes, args.single_dim, dim=1)
-                pprint.pprint(np.around((h - l).numpy(), decimals=2))
-                for indexer in range(len(children)):
-                    child = children[indexer]
-                    res[child] = embTmpRes[indexer]
-    # exit(1)
-    for child in children:
-        if tree[child].direct_children:
-            train_dfs(child, res, args, tree, leavesMatrix, device)
-
-
-def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCounter):
-    # Return, the leaf level and needn't process.
+def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCounter, parentDict, layerBasedDict):
+    """
+    Layer by layer training function.
+    :param curLayer:  current layer that to be trained
+    :param res:         the final results
+    :param args:        the arguments in script
+    :param tree:        the tree structure
+    :param leavesMatrix:    the similarity matrix among leaves
+    :param device:      the training device
+    :param layerCounter:    a dict that store the list of nodes of each layer
+    :return:
+    """
+    # Return the leaf level and needn't process.
     if curLayer > len(layerCounter) - 2 :
         return
-    print('Training layer No.'+str(curLayer))
+    print("Start training the network:"+str(curLayer)+"......")
+    parentList = layerCounter[curLayer]
+    childrenList = layerCounter[curLayer + 1]
 
-    
+    # Calc the ground-truth of this layer, the simMatrix is in the order of childrenList.
+    simMatrix = etl.getLayerNodesSimBasedOnLeavesSim(leavesMatrix, childrenList, tree, 100)
+    simMatrixNorm = etl.normalizeMatrix(simMatrix)
+    # print('init network')
+    # Initialize the network model.
+    networkModel = NetworkModel(
+        children=childrenList,
+        args=args
+    )
+    # print('init dataset')
+    # Load the network training dataset.
+    networkDataLoader = DataLoader(
+        networkDataset(simMatrixNorm, args),
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=max(1, args.cpu_num // 2),
+        collate_fn=lambda x: networkDataset.collate_fn(x, args.batch_size),
+        drop_last=False
+    )
+    # The network iterator.
+    networkTrainingIterator = BidirectionalOneShotIterator(networkDataLoader)
 
+    networkLearningRate = args.learning_rate
+    networkOptimizer = torch.optim.Adam(
+        filter(lambda p: p.requires_grad, networkModel.parameters()),
+        lr=networkLearningRate
+    )
+    # Start training the network.
+    preLoss = float('inf')
+    for step in range(0, args.max_steps):
+        loss, embeddingOmega = NetworkModel.train_step(networkModel, networkOptimizer, networkTrainingIterator)
+        if step % 100 == 0:
+            lossNumeric = loss.item()
+            print("Network layer:%d, iterator is %d, loss is:%f" % (curLayer, step, lossNumeric))
+            if abs(lossNumeric - preLoss) < 0.01:
+                break
+            else:
+                preLoss = lossNumeric
 
+    # Start training the tree.
+    print("Start training the tree:" + str(curLayer) + "......")
+    # The medium omega is in the order of children list.
+    omega = embeddingOmega.data.numpy()
 
+    treeModel = HierarchyModel(
+        layer = curLayer,
+        omega=omega,
+        res=res,
+        args=args,
+        childrenList=childrenList,
+        parentsList=parentList,
+        device=device,
+        parentDict = parentDict,
+        layerBasedRes = layerBasedDict,
+        tree = tree
+    )
+
+    treeModel.to(device)
+    treeModel.train()
+
+    # Load the tree training dataset.
+    treeDataLoader = DataLoader(
+        treeDataset(omega, args),
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=max(1, args.cpu_num // 2),
+        collate_fn=lambda x: treeDataset.collate_fn(x, args.batch_size),
+        drop_last=False
+    )
+    # The tree iterator.
+    treeTrainingIterator = BidirectionalOneShotIterator(treeDataLoader)
+
+    treeLearningRate = args.learning_rate
+    treeOptimizer = torch.optim.Adam(
+        filter(lambda p: p.requires_grad, treeModel.parameters()),
+        lr=treeLearningRate
+    )
+
+    # Start training the tree.
+    treePreLoss = float('inf')
+    for step in range(0, args.max_steps):
+        treeLossNumeric, embedding = treeModel.trainStep(treeModel, treeOptimizer, treeTrainingIterator, step)
+        embTmpRes = embedding.data.cpu()
+
+        if step % 100 == 0:
+            print("Tree layer:%d, iterator is %d, loss is:%f" % (curLayer, step, treePreLoss))
+
+            if abs(treeLossNumeric - treePreLoss) < ((curLayer + 1)) * 0.0001:
+
+                for k in childrenList:
+                    pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
+
+                pprint.pprint(embTmpRes.numpy())
+                l, h = torch.split(embTmpRes, args.single_dim_t, dim=1)
+                pprint.pprint(np.around((h - l).numpy(), decimals=4))
+
+                for indexer in range(len(childrenList)):
+                    child = childrenList[indexer]
+                    res[child] = embTmpRes[indexer]
+                break
+            else:
+                treePreLoss = treeLossNumeric
+
+    layerWiseTraining(curLayer+1, res, args, tree, leavesMatrix, device, layerCounter, parentDict, layerBasedDict)
 
 def main(args):
     """
@@ -193,15 +197,16 @@ def main(args):
     # Parameters verifying.
     if (not args.do_train):
         raise ValueError('error.')
-    if (args.hidden_dim % 2 != 0):
+    if (args.hidden_dim_t % 2 != 0):
         raise ValueError('hidden_error')
-    args.single_dim = args.hidden_dim // 2
+    args.single_dim_t = args.hidden_dim_t // 2
 
     # Select a device, cpu or gpu.
     if args.usecuda:
-        device = "cuda:2" if torch.cuda.is_available() else "cpu"
+        devicePU = "cuda:3" if torch.cuda.is_available() else "cpu"
     else:
-        device = "cpu"
+        devicePU = "cpu"
+    device = torch.device(devicePU)
 
     # Load the tree and some properties of the tree.
     tree, total_level, all_leaves = etl.prepare_tree(args.data_path)
@@ -210,29 +215,30 @@ def main(args):
     # Define the root node
     root = len(tree) - 1
     # Calc the graph similarity, i.e. the matrix \capA in paper.
-    leaves_similarity = etl.get_leaves_similarity(graph)
+    leavesSimilarity = etl.get_leaves_similarity(graph)
 
     # Initialize the result and fix the root node's embedding.
-    root_embedding_lower = torch.zeros(1, args.single_dim)
-    root_embedding_upper = args.single_circle_range * torch.ones(1, args.single_dim)
+    root_embedding_lower = torch.zeros(1, args.single_dim_t)
+    root_embedding_upper = args.single_circle_range * torch.ones(1, args.single_dim_t)
     root_embedding = torch.cat((root_embedding_lower, root_embedding_upper), 1)[0]
-    res = torch.zeros(len(tree),args.hidden_dim)
+    # print(root_embedding)
+    res = torch.zeros(len(tree), args.hidden_dim_t)
     res[root] = root_embedding
 
     # Initialize the layer dict containing lists of nodes of each layer.
     layerCounter = [[] for i in range(total_level)]
+    parentDict = {}
     for node in tree:
+        if node.id != root:
+            parentDict[node.id] = node.path[-2]
         layerCounter[node.level - 1].append(node.id)
 
-    # Train HASNE layer by layer.
-    layerWiseTraining(0, res, args, tree, leaves_similarity, device, layerCounter)
+    # Initialize the layerBasedDistance dict.
+    layerBasedDict = {}
 
+    # Train HASNE layer by layer, start from the 0(which the root locate in) layer.
+    layerWiseTraining(0, res, args, tree, leavesSimilarity, device, layerCounter, parentDict, layerBasedDict)
 
-
-    # calc the graph similarity
-    leaves_similarity = etl.get_leaves_similarity(graph)
-
-    train_dfs(root,res, args, tree, leaves_similarity,device)
 
     res_output = os.path.join(args.res_path, "res_"+str(int(time.time())))
 
