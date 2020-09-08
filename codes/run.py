@@ -45,13 +45,10 @@ def parse_args(args=None):
     parser.add_argument('--data_path', type=str, default=None)
     parser.add_argument('--network_path', type=str, default=None)
     parser.add_argument('--max_steps', type=int, default=50000)
-    parser.add_argument('--max_epochs', type=int, default=10)
     parser.add_argument('-lr', '--learning_rate', default=0.0001, type=float)
     parser.add_argument('-scr', '--single_circle_range', default=2 * math.pi * 10, type=float)
 
-    parser.add_argument('-n', '--negative_sample_size', default=1, type=int)
-    parser.add_argument('--warm_up_steps', default=None, type=int)
-    parser.add_argument('-d', '--hidden_dim', default=2, type=int)
+
     parser.add_argument('-dn', '--hidden_dim_n', default=16, type=int)
     parser.add_argument('-dt', '--hidden_dim_t', default=2, type=int)
 
@@ -60,6 +57,14 @@ def parse_args(args=None):
 
     parser.add_argument('-b', '--batch_size', default=500, type=int)
     parser.add_argument('--res_path', type=str)
+
+    parser.add_argument('--loss_distance', default=0.0001, type=float)
+    parser.add_argument('--loss_shape', default=0.0001, type=float)
+    parser.add_argument('--loss_overlap', default=0.0001, type=float)
+    parser.add_argument('--loss_exceed', default=0.0001, type=float)
+    parser.add_argument('--loss_positive', default=0.0001, type=float)
+
+
 
     return parser.parse_args(args)
 
@@ -171,7 +176,7 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
         if step % 100 == 0:
             print("Tree layer:%d, iterator is %d, loss is:%f" % (curLayer, step, treePreLoss))
 
-            if abs(treeLossNumeric - treePreLoss) < ((curLayer + 1)) * 0.0001:
+            if abs(treeLossNumeric - treePreLoss) < ((curLayer + 1)) * 0.00003   :
 
                 for k in childrenList:
                     pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
@@ -186,6 +191,13 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
                 break
             else:
                 treePreLoss = treeLossNumeric
+        if step == args.max_steps - 1:
+            for indexer in range(len(childrenList)):
+                child = childrenList[indexer]
+                res[child] = embTmpRes[indexer]
+
+
+
 
     layerWiseTraining(curLayer+1, res, args, tree, leavesMatrix, device, layerCounter, parentDict, layerBasedDict)
 
@@ -243,8 +255,21 @@ def main(args):
 
     res_output = os.path.join(args.res_path, "res_"+str(int(time.time())))
 
-
-    write_to_file(res_output, json.dumps(res.numpy().tolist()))
+    final_res = {
+        'learningRate':args.learning_rate,
+        'batchSize':args.batch_size,
+        'networkDims':args.hidden_dim_n,
+        'treeDims':args.hidden_dim_t,
+        'circleRange':args.single_circle_range,
+        'steps':args.max_steps,
+        'loss_distance':args.loss_distance,
+        'loss_exceed':args.loss_exceed,
+        'loss_overlap':args.loss_overlap,
+        'loss_shape':args.loss_shape,
+        'loss_positive':args.loss_positive,
+        'embedding':res.numpy().tolist()
+    }
+    write_to_file(res_output, json.dumps(final_res))
 
 
 

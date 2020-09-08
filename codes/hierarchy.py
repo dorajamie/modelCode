@@ -15,7 +15,7 @@ class HierarchyModel(nn.Module):
         super(HierarchyModel, self).__init__()
 
         self.args = args
-        self.tree = tree.to(device)
+        self.tree = tree
         self.childrenList = childrenList
         self.parentsList = parentsList
         self.childrenNodesNum = len(childrenList)
@@ -71,7 +71,7 @@ class HierarchyModel(nn.Module):
         layerContainsInRes = torch.index_select(
             res,
             dim=0,
-            index=torch.tensor(layerContains)
+            index=torch.tensor(layerContains).to(self.device)
         )
         layerContainsLower, layerContainsHigher = torch.split(layerContainsInRes, self.singleDim, dim=1)
 
@@ -84,12 +84,12 @@ class HierarchyModel(nn.Module):
         # Accumulate the upper layers' distance.
         if self.curLayer > 0:
             accumulatedLayerDist = curLayerDist + layerBasedRes[self.curLayer - 1]
-            accumulatedLayerExpand = torch.repeat_interleave(accumulatedLayerDist, repeats=torch.tensor(self.childrenNumOfEachParent),dim=0)
-            accumulatedLayerExpand = torch.repeat_interleave(accumulatedLayerExpand, repeats=torch.tensor(self.childrenNumOfEachParent),dim=1)
+            accumulatedLayerExpand = torch.repeat_interleave(accumulatedLayerDist, repeats=torch.tensor(self.childrenNumOfEachParent).to(self.device),dim=0)
+            accumulatedLayerExpand = torch.repeat_interleave(accumulatedLayerExpand, repeats=torch.tensor(self.childrenNumOfEachParent).to(self.device),dim=1)
             layerBasedRes[self.curLayer] = accumulatedLayerExpand
         else:
-            curLayerDistExpand = torch.repeat_interleave(curLayerDist, repeats=torch.tensor(self.childrenNumOfEachParent), dim=0)
-            curLayerDistExpand = torch.repeat_interleave(curLayerDistExpand, repeats=torch.tensor(self.childrenNumOfEachParent), dim=1)
+            curLayerDistExpand = torch.repeat_interleave(curLayerDist, repeats=torch.tensor(self.childrenNumOfEachParent).to(self.device), dim=0)
+            curLayerDistExpand = torch.repeat_interleave(curLayerDistExpand, repeats=torch.tensor(self.childrenNumOfEachParent).to(self.device), dim=1)
             layerBasedRes[self.curLayer] = curLayerDistExpand
 
         return layerBasedRes
@@ -148,12 +148,12 @@ class HierarchyModel(nn.Module):
         correspondingParentsEmbL = torch.index_select(
             resEmbLower,
             dim=0,
-            index=torch.tensor(correspondingParentsIds)
+            index=torch.tensor(correspondingParentsIds).to(self.device)
         )
         correspondingParentsEmbH = torch.index_select(
             resEmbHigher,
             dim=0,
-            index=torch.tensor(correspondingParentsIds)
+            index=torch.tensor(correspondingParentsIds).to(self.device)
         )
         correspondingParentsEmbL_ = torch.add(correspondingParentsEmbL, self.circleRange)
         correspondingParentsEmbH_ = torch.add(correspondingParentsEmbH, self.circleRange)
@@ -212,17 +212,18 @@ class HierarchyModel(nn.Module):
         correspondingParentsEmbDiff = torch.index_select(
             resEmbDiff,
             dim=0,
-            index=torch.tensor(correspondingParentsIds)
+            index=torch.tensor(correspondingParentsIds).to(self.device)
         )
         # print('shapeLike:')
         # print('correspondingParentsEmbDiff')
         # print(correspondingParentsEmbDiff)
+
         numeratorShapeLike = HierarchyModel.clip_by_min(torch.div(childrenEmbDiff, correspondingParentsEmbDiff))
         # print(numeratorShapeLike)
         denominatorShapeLike = torch.index_select(
             self.eachNodeLeavesNum,
             dim=0,
-            index=torch.tensor(idIndexes)
+            index=torch.tensor(idIndexes).to(self.device)
         )
         # print('denominatorShapeLike')
         denominatorShapeLike = denominatorShapeLike.unsqueeze(1)
@@ -232,6 +233,7 @@ class HierarchyModel(nn.Module):
         # print('shapeLikeDiv')
         # print(shapeLikeDiv)
         lossShapeLike = torch.abs(torch.log(shapeLikeDiv))
+
         # print('lossShapeLike')
         # print(lossShapeLike)
         lossShapeLike = HierarchyModel.clip_by_max(lossShapeLike).sum()
@@ -251,13 +253,13 @@ class HierarchyModel(nn.Module):
         correspondingAccumulatedDist = torch.index_select(
             self.layerBasedRes[self.curLayer],
             dim=0,
-            index=torch.tensor(idIndexes)
+            index=torch.tensor(idIndexes).to(self.device)
         )
 
         correspondingAccumulatedDist = torch.index_select(
             correspondingAccumulatedDist,
             dim=1,
-            index=torch.tensor(idIndexes)
+            index=torch.tensor(idIndexes).to(self.device)
         )
 
         realDistance = correspondingAccumulatedDist + currentLayerDistance
@@ -292,11 +294,11 @@ class HierarchyModel(nn.Module):
 
 
         loss = \
-            0.001 * lossDistance + \
-            0.55 * lossShapeLike +  \
-            0.01 * lossExceed + \
-            0.35 * lossOverlap + \
-            0.1 * lossPositive
+            self.args.loss_distance * lossDistance + \
+            self.args.loss_shape * lossShapeLike +  \
+            self.args.loss_exceed * lossExceed + \
+            self.args.loss_overlap * lossOverlap + \
+            self.args.loss_positive * lossPositive
 
 
         return loss
