@@ -1,11 +1,11 @@
-from operator import itemgetter
+import math
 
-ids = [2616,1]
-parentDict = {
-    1:123,
-    2:444,
-    2616:333
-}
+import torch
 
-correspondingParentsIds = list(itemgetter(*ids)(parentDict))
-print(correspondingParentsIds)
+
+
+a = torch.tensor([1,0.0976,0.765,0,0.0000001],dtype=torch.float)
+
+b =torch.abs(torch.tan(torch.mul(torch.add(a,-1),math.pi / 2)))
+
+print(b)

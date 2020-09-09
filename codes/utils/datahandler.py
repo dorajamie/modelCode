@@ -135,4 +135,7 @@ class treeDataset(Dataset):
         ids = [_[0] for _ in data]
         emb = [_[1] for _ in data]
 
+        ids = torch.tensor(ids)
+        emb = torch.tensor(emb)
+
         return ids, emb

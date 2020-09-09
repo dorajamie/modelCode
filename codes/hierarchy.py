@@ -4,6 +4,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import math
+
 import torch
 import torch.nn as nn
 from operator import itemgetter
@@ -117,22 +119,19 @@ class HierarchyModel(nn.Module):
 
 
 
-    def forward(self,data,step):
+    def forward(self,idIndexes,omegaEmb,epoch):
         # The index order.
-        idIndexes = data[0]
         # The original order.
         ids = [self.childrenList[i] for i in idIndexes]
         # print('idIndexes:')
         # print(idIndexes)
-        omegaEmb = data[1]
         nodesNum = len(ids)
 
-
-        omegaEmb4ids = torch.tensor(omegaEmb)
+        omegaEmb4ids = omegaEmb
         finalEmb4ids = torch.index_select(
             self.childrenEmbedding,
             dim=0,
-            index=torch.tensor(idIndexes).to(self.device)
+            index=idIndexes
         )
         # parentsEmbLower, parentsEmbHigher = torch.split(self.parentsEmbedding, self.singleDim, dim=1)
         resEmbLower, resEmbHigher = torch.split(self.res, self.singleDim, dim=1)
@@ -180,18 +179,32 @@ class HierarchyModel(nn.Module):
         childrenEmbeddingLowerTran1 = childrenEmbeddingLowerTran1.repeat(1, nodesNum)
         childrenEmbeddingHigherTran1 = torch.reshape(childrenEmbeddingHigher.t(),(childrenEmbeddingHigher.numel(),1))
         childrenEmbeddingHigherTran1 = childrenEmbeddingHigherTran1.repeat(1, nodesNum)
-
+        # print('childrenEmbeddingLowerTran1')
+        # print(childrenEmbeddingLowerTran1)
+        # print('childrenEmbeddingHigherTran1')
+        # print(childrenEmbeddingHigherTran1)
         childrenEmbeddingLowerTran2 = torch.repeat_interleave(childrenEmbeddingLower.t(), repeats=nodesNum, dim=0)
         childrenEmbeddingHigherTran2 = torch.repeat_interleave(childrenEmbeddingHigher.t(), repeats=nodesNum, dim=0)
-
+        # print('childrenEmbeddingLowerTran2')
+        # print(childrenEmbeddingLowerTran2)
+        # print('childrenEmbeddingHigherTran2')
+        # print(childrenEmbeddingHigherTran2)
         maxLower = torch.where(childrenEmbeddingLowerTran1 > childrenEmbeddingLowerTran2, childrenEmbeddingLowerTran1,
                             childrenEmbeddingLowerTran2)
         minHigher = torch.where(childrenEmbeddingHigherTran1 < childrenEmbeddingHigherTran2, childrenEmbeddingHigherTran1,
                             childrenEmbeddingHigherTran2)
+        # print('maxLower')
+        # print(maxLower)
+        # print('minHigher')
+        # print(minHigher)
         overlapPre = minHigher - maxLower
+        # print('overlapPre')
+        # print(overlapPre)
         overlapFilter = torch.ones((nodesNum, nodesNum)) - torch.eye((nodesNum))
         overlapFilter = overlapFilter.repeat(self.singleDim, 1).to(self.device)
         overlap_ = torch.mul(overlapPre, overlapFilter)
+        # print('overlap_')
+        # print(overlap_)
         overlapNumerator = torch.where(overlap_ > 0, overlap_, torch.Tensor([0]).to(self.device))
         # print('overlapNumerator')
         # print(overlapNumerator)
@@ -206,7 +219,6 @@ class HierarchyModel(nn.Module):
         lossOverlap = overlap.sum()
         # print(lossOverlap)
         # Calculate the penalty for the shape-like part.
-        # parentsEmbDiff = parentsEmbHigher - parentsEmbLower
         resEmbDiff = resEmbHigher - resEmbLower
         # Expand the parentDiff
         correspondingParentsEmbDiff = torch.index_select(
@@ -223,7 +235,7 @@ class HierarchyModel(nn.Module):
         denominatorShapeLike = torch.index_select(
             self.eachNodeLeavesNum,
             dim=0,
-            index=torch.tensor(idIndexes).to(self.device)
+            index=idIndexes
         )
         # print('denominatorShapeLike')
         denominatorShapeLike = denominatorShapeLike.unsqueeze(1)
@@ -232,7 +244,11 @@ class HierarchyModel(nn.Module):
         shapeLikeDiv = torch.div(numeratorShapeLike, denominatorShapeLike)
         # print('shapeLikeDiv')
         # print(shapeLikeDiv)
-        lossShapeLike = torch.abs(torch.log(shapeLikeDiv))
+
+        # lossShapeLike = 100 * torch.add(shapeLikeDiv,-1)**2
+        # lossShapeLike = torch.abs(torch.log(shapeLikeDiv))
+        shapeLikeDiv = HierarchyModel.clip_by_max(shapeLikeDiv, ma=math.pi * 0.49999)
+        lossShapeLike = torch.abs(torch.tan(torch.mul(torch.add(shapeLikeDiv, -1),math.pi / 2)))
 
         # print('lossShapeLike')
         # print(lossShapeLike)
@@ -253,13 +269,13 @@ class HierarchyModel(nn.Module):
         correspondingAccumulatedDist = torch.index_select(
             self.layerBasedRes[self.curLayer],
             dim=0,
-            index=torch.tensor(idIndexes).to(self.device)
+            index=idIndexes
         )
 
         correspondingAccumulatedDist = torch.index_select(
             correspondingAccumulatedDist,
             dim=1,
-            index=torch.tensor(idIndexes).to(self.device)
+            index=idIndexes
         )
 
         realDistance = correspondingAccumulatedDist + currentLayerDistance
@@ -282,8 +298,9 @@ class HierarchyModel(nn.Module):
 
         lossPositive = HierarchyModel.clip_by_min(torch.exp(-1 * (childrenEmbDiff))).sum()
 
-        if step % 100 == 0:
+        if epoch % 100 == 0:
             print('*****************************')
+            print('epoch:'+str(epoch))
             print('loss:'+str(self.curLayer))
             print('lossDistance:%f' % lossDistance)
             print('lossShapeLike:%f' % lossShapeLike)

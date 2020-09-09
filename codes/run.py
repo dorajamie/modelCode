@@ -13,8 +13,7 @@ import pprint
 import time
 import sys
 import torch
-
-
+from tqdm import tqdm
 
 ROOT_DIR='/home/lduan/modelCode'
 sys.path.append(ROOT_DIR)
@@ -45,6 +44,7 @@ def parse_args(args=None):
     parser.add_argument('--data_path', type=str, default=None)
     parser.add_argument('--network_path', type=str, default=None)
     parser.add_argument('--max_steps', type=int, default=50000)
+    parser.add_argument('--max_epoch', type=int, default=50000)
     parser.add_argument('-lr', '--learning_rate', default=0.0001, type=float)
     parser.add_argument('-scr', '--single_circle_range', default=2 * math.pi * 10, type=float)
 
@@ -161,41 +161,87 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
     # The tree iterator.
     treeTrainingIterator = BidirectionalOneShotIterator(treeDataLoader)
 
+
     treeLearningRate = args.learning_rate
     treeOptimizer = torch.optim.Adam(
         filter(lambda p: p.requires_grad, treeModel.parameters()),
         lr=treeLearningRate
     )
 
-    # Start training the tree.
+    # Start training the tree in epochs.
     treePreLoss = float('inf')
-    for step in range(0, args.max_steps):
-        treeLossNumeric, embedding = treeModel.trainStep(treeModel, treeOptimizer, treeTrainingIterator, step)
-        embTmpRes = embedding.data.cpu()
 
-        if step % 100 == 0:
-            print("Tree layer:%d, iterator is %d, loss is:%f" % (curLayer, step, treePreLoss))
+    for epoch in range(0, args.max_epoch):
+        for i, data in enumerate(treeDataLoader):
+            idx = data[0].to(device)
+            omega = data[1].to(device)
+            # data = data.to(device)
+            # treeLossNumeric, embedding = treeModel.trainStep(treeModel, treeOptimizer, treeTrainingIterator, step)
+            treeOptimizer.zero_grad()
+            treeLoss = treeModel(idx, omega, epoch)
+            treeLoss.backward()
+            treeOptimizer.step()
 
-            if abs(treeLossNumeric - treePreLoss) < ((curLayer + 1)) * 0.00003   :
+        if epoch % 100 == 0:
+            loss = treeLoss.item()
 
+            print("Tree layer:%d, epoch is %d, loss is:%f" % (curLayer, epoch, loss))
+            if abs(loss - treePreLoss) < 0.00003:
+                embTmpRes = treeModel.childrenEmbedding.data.cpu()
                 for k in childrenList:
                     pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
-
                 pprint.pprint(embTmpRes.numpy())
                 l, h = torch.split(embTmpRes, args.single_dim_t, dim=1)
-                pprint.pprint(np.around((h - l).numpy(), decimals=4))
-
+                pprint.pprint(np.around((h - l).numpy(), decimals=6))
                 for indexer in range(len(childrenList)):
                     child = childrenList[indexer]
                     res[child] = embTmpRes[indexer]
                 break
             else:
-                treePreLoss = treeLossNumeric
-        if step == args.max_steps - 1:
+                treePreLoss = loss
+
+        if epoch == args.max_epoch - 1:
+            # embTmpRes = treeModel.childrenEmbedding.data.cpu()
+            embTmpRes = treeModel.childrenEmbedding.data.cpu()
+            for k in childrenList:
+                pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
+            pprint.pprint(embTmpRes.numpy())
+            l, h = torch.split(embTmpRes, args.single_dim_t, dim=1)
+            pprint.pprint(np.around((h - l).numpy(), decimals=6))
             for indexer in range(len(childrenList)):
                 child = childrenList[indexer]
                 res[child] = embTmpRes[indexer]
 
+    # Start training the tree.
+    # treePreLoss = float('inf')
+    # for step in range(0, args.max_steps):
+    #
+    #     treeLossNumeric, embedding = treeModel.trainStep(treeModel, treeOptimizer, treeTrainingIterator, step)
+    #
+    #
+    #     if step % 100 == 0:
+    #         print("Tree layer:%d, iterator is %d, loss is:%f" % (curLayer, step, treePreLoss))
+    #         embTmpRes = embedding.data.cpu()
+    #         if abs(treeLossNumeric - treePreLoss) < ((curLayer + 1)) * 0.00003   :
+    #
+    #             for k in childrenList:
+    #                 pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
+    #
+    #             pprint.pprint(embTmpRes.numpy())
+    #             l, h = torch.split(embTmpRes, args.single_dim_t, dim=1)
+    #             pprint.pprint(np.around((h - l).numpy(), decimals=4))
+    #
+    #             for indexer in range(len(childrenList)):
+    #                 child = childrenList[indexer]
+    #                 res[child] = embTmpRes[indexer]
+    #             break
+    #         else:
+    #             treePreLoss = treeLossNumeric
+    #     if step == args.max_steps - 1:
+    #         embTmpRes = embedding.data.cpu()
+    #         for indexer in range(len(childrenList)):
+    #             child = childrenList[indexer]
+    #             res[child] = embTmpRes[indexer]
 
 
 
