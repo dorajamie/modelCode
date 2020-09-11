@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
 from operator import itemgetter
+import pandas as pd
 
 import torch
 from matplotlib import colors
@@ -198,22 +199,44 @@ class Metric(object):
     @staticmethod
     def drawG():
         graph = etl.prepare_graph('../data/tree2_mammal')
-        pdf_output = '../res/vis_mammal_defalut.pdf'
-        fig = plt.figure(figsize=(15, 15))
+        pdf_output = '../res/vis_mammal_defalut_better.pdf'
+        fig = plt.figure(figsize=(30, 30))
+
 
 
         nx.draw(
             graph,
             with_labels=False,
-            pos = nx.random_layout(graph),
-            node_size=50,
-
+            # pos = nx.random_layout(graph),
+            node_size=100,
+            width=0.3,
+            node_color='b',
+            edge_color='r'
         )
-        # nx.draw_networkx(graph)
+
 
 
         plt.show()
-
+        # fig = plt.figure(figsize=(30, 30))
+        # G = nx.Graph()
+        #
+        # f = pd.read_csv('../data/mammal_closure.csv', header=0, sep=',')
+        # d = pd.DataFrame()
+        # d['parent'] = f['id2']
+        # d['child'] = f['id1']
+        # d['w'] = f['weight']
+        # d = d[~(d['parent'] == d['child'])]
+        # G.add_weighted_edges_from(d.values)
+        #
+        # nx.draw(
+        #     G,
+        #     node_size=100,
+        #     width=0.3,
+        #     node_color='b',
+        #     edge_color='r',
+        #     # pos=nx.random_layout(G),
+        # )
+        # plt.show()
         pp = PdfPages(pdf_output)
         pp.savefig(fig)
         pp.close()

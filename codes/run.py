@@ -186,7 +186,7 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
             loss = treeLoss.item()
 
             print("Tree layer:%d, epoch is %d, loss is:%f" % (curLayer, epoch, loss))
-            if abs(loss - treePreLoss) < 0.00003:
+            if abs(loss - treePreLoss) < 0.00005:
                 embTmpRes = treeModel.childrenEmbedding.data.cpu()
                 for k in childrenList:
                     pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
@@ -198,7 +198,16 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
                     res[child] = embTmpRes[indexer]
                 break
             else:
+                # if abs(loss - treePreLoss) < 0.01:
+                # for name, parms in treeModel.named_parameters():
+                #     # print('-->name:', name, '-->grad_requires:', parms.requires_grad, \
+                #     #       ' -->grad_value:', parms.grad)
+                #     print('grad:')
+                #     print(parms.grad)
                 treePreLoss = loss
+
+
+
 
         if epoch == args.max_epoch - 1:
             # embTmpRes = treeModel.childrenEmbedding.data.cpu()
@@ -307,7 +316,7 @@ def main(args):
         'networkDims':args.hidden_dim_n,
         'treeDims':args.hidden_dim_t,
         'circleRange':args.single_circle_range,
-        'steps':args.max_steps,
+        'epoch':args.max_epoch,
         'loss_distance':args.loss_distance,
         'loss_exceed':args.loss_exceed,
         'loss_overlap':args.loss_overlap,

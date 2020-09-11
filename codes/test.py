@@ -52,7 +52,7 @@ if __name__ == "__main__":
         'metric_output':'../res/metric_'+inputFileName,
         'metric_function':[
             {
-                'metric_func':'drawGNE'
+                'metric_func':'drawG'
             },
         ],
     }

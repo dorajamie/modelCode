@@ -16,6 +16,9 @@ class HierarchyModel(nn.Module):
     def __init__(self,layer,omega,args,childrenList,parentsList,res,device,parentDict,layerBasedRes, tree):
         super(HierarchyModel, self).__init__()
 
+        self.debug_layer = 1
+        self.debug_epoch = 70000
+
         self.args = args
         self.tree = tree
         self.childrenList = childrenList
@@ -37,22 +40,51 @@ class HierarchyModel(nn.Module):
         eachNodeLeavesNum = []
         for child in childrenList:
             eachNodeLeavesNum.append(len(tree[child].leaves))
-        self.eachNodeLeavesNum = torch.div(torch.Tensor(eachNodeLeavesNum), sum(eachNodeLeavesNum)).to(device)
 
+        correspondingAllParentsIds = list(itemgetter(*childrenList)(parentDict))
+        eachNodeParentLeavesNum = []
+        for parent in correspondingAllParentsIds:
+            eachNodeParentLeavesNum.append(len(tree[parent].leaves))
 
+        eachNodeLeavesNumRatio = torch.div(torch.Tensor(eachNodeLeavesNum), sum(eachNodeLeavesNum)).to(device)
+
+        self.eachNodeLeavesNum = torch.div(torch.Tensor(eachNodeLeavesNum), torch.tensor(eachNodeParentLeavesNum)).to(device)
+
+        initRangeForChildren = torch.mul(eachNodeLeavesNumRatio, self.circleRange).unsqueeze(1)
 
         # Initialize the embedding of the next layer.
-        layerEmbedding = torch.zeros(self.childrenNodesNum, self.hiddenDim).to(device)
-        nn.init.uniform_(
-            tensor=layerEmbedding,
-            a=(self.circleRange * (layer + 1) ),
-            b=(self.circleRange * (layer + 2) )
-        )
-        nodeEmbeddingL, nodeEmbeddingH = torch.split(layerEmbedding, self.singleDim, dim=1)
-        # Make the higher is larger than the lower
-        nodeEmbeddingL = torch.where(nodeEmbeddingL < nodeEmbeddingH, nodeEmbeddingL, nodeEmbeddingH)
-        nodeEmbeddingH = torch.where(nodeEmbeddingL > nodeEmbeddingH, nodeEmbeddingL, nodeEmbeddingH)
-        layerEmbedding = torch.cat((nodeEmbeddingL, nodeEmbeddingH), dim=1)
+        for dim in range(self.singleDim):
+            layerLowerEmbeddingE = torch.zeros(self.childrenNodesNum, 1)
+            nn.init.uniform_(
+                tensor=layerLowerEmbeddingE,
+                a=(self.circleRange * (layer + 1)),
+                b=(self.circleRange * (layer + 2))
+            )
+            if dim == 0:
+                layerLowerEmbedding = layerLowerEmbeddingE
+            else:
+                layerLowerEmbedding = torch.cat((layerLowerEmbedding, layerLowerEmbeddingE), 1)
+
+        # print(layerLowerEmbedding)
+        # print(initRangeForChildren)
+
+        layerHigherEmbedding = layerLowerEmbedding + initRangeForChildren
+
+
+        layerEmbedding = torch.cat((layerLowerEmbedding,layerHigherEmbedding),1)
+        # print(layerEmbedding)
+        # Initialize the embedding of the next layer.
+        # layerEmbedding = torch.zeros(self.childrenNodesNum, self.hiddenDim).to(device)
+        # nn.init.uniform_(
+        #     tensor=layerEmbedding,
+        #     a=(self.circleRange * (layer + 1) ),
+        #     b=(self.circleRange * (layer + 2) )
+        # )
+        # nodeEmbeddingL, nodeEmbeddingH = torch.split(layerEmbedding, self.singleDim, dim=1)
+        # # Make the higher is larger than the lower
+        # nodeEmbeddingL = torch.where(nodeEmbeddingL < nodeEmbeddingH, nodeEmbeddingL, nodeEmbeddingH)
+        # nodeEmbeddingH = torch.where(nodeEmbeddingL > nodeEmbeddingH, nodeEmbeddingL, nodeEmbeddingH)
+        # layerEmbedding = torch.cat((nodeEmbeddingL, nodeEmbeddingH), dim=1)
         self.childrenEmbedding = nn.Parameter(layerEmbedding, requires_grad=True)
 
         # Initialize the layer-based-distance dict for previous layer.
@@ -68,8 +100,7 @@ class HierarchyModel(nn.Module):
         :param res:
         :return:
         """
-        layerContains = self.parentDict[self.curLayer]
-
+        layerContains = self.parentsList
         layerContainsInRes = torch.index_select(
             res,
             dim=0,
@@ -123,8 +154,9 @@ class HierarchyModel(nn.Module):
         # The index order.
         # The original order.
         ids = [self.childrenList[i] for i in idIndexes]
-        # print('idIndexes:')
-        # print(idIndexes)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('idIndexes:')
+            print(idIndexes)
         nodesNum = len(ids)
 
         omegaEmb4ids = omegaEmb
@@ -156,68 +188,94 @@ class HierarchyModel(nn.Module):
         )
         correspondingParentsEmbL_ = torch.add(correspondingParentsEmbL, self.circleRange)
         correspondingParentsEmbH_ = torch.add(correspondingParentsEmbH, self.circleRange)
-        exceedPart1 = correspondingParentsEmbL_ - childrenEmbeddingLower
-        exceedPart2 = childrenEmbeddingHigher - correspondingParentsEmbH_
-        # print('childrenEmbedding in this step:')
-        # print(self.childrenEmbedding)
-        # print('selected childrenEmbedding in this step:')
-        # print(finalEmb4ids)
-        # print('correspondingParentsEmbL')
-        # print(correspondingParentsEmbL)
-        # print('correspondingParentsEmbH')
-        # print(correspondingParentsEmbH)
-        # print('lossExceed:')
-        # print(exceedPart1)
-        # print(exceedPart2)
-        lossExceed = torch.relu(exceedPart1).sum() + torch.relu(exceedPart2).sum()
-        # print(lossExceed)
+
+        exceedPart1_1 = correspondingParentsEmbL_ - childrenEmbeddingLower
+        exceedPart1_2 = correspondingParentsEmbL_ - childrenEmbeddingHigher
+
+        exceedPart2_1 = childrenEmbeddingHigher - correspondingParentsEmbH_
+        exceedPart2_2 = childrenEmbeddingLower - correspondingParentsEmbH_
+
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('res')
+            print(self.res)
+            print('childrenEmbedding in this step:')
+            print(self.childrenEmbedding)
+            print('selected childrenEmbedding in this step:')
+            print(finalEmb4ids)
+            print('correspondingParentsEmbL')
+            print(correspondingParentsEmbL)
+            print('correspondingParentsEmbH')
+            print(correspondingParentsEmbH)
+            print('lossExceed:')
+            print(torch.relu(exceedPart1_1))
+            print(torch.relu(exceedPart1_2))
+            print(torch.relu(exceedPart2_1))
+            print(torch.relu(exceedPart2_2))
+        lossExceed = torch.relu(exceedPart1_1).sum() + torch.relu(exceedPart2_1).sum() + torch.relu(exceedPart1_2).sum() + torch.relu(exceedPart2_2).sum()
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print(lossExceed)
         # Calculate the penalty for the overlap part.
-        # print('childrenEmbDiff')
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('childrenEmbDiff')
         childrenEmbDiff = childrenEmbeddingHigher - childrenEmbeddingLower
-        # print(childrenEmbDiff)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print(childrenEmbDiff)
         childrenEmbeddingLowerTran1 = torch.reshape(childrenEmbeddingLower.t(),(childrenEmbeddingLower.numel(),1))
         childrenEmbeddingLowerTran1 = childrenEmbeddingLowerTran1.repeat(1, nodesNum)
         childrenEmbeddingHigherTran1 = torch.reshape(childrenEmbeddingHigher.t(),(childrenEmbeddingHigher.numel(),1))
         childrenEmbeddingHigherTran1 = childrenEmbeddingHigherTran1.repeat(1, nodesNum)
-        # print('childrenEmbeddingLowerTran1')
-        # print(childrenEmbeddingLowerTran1)
-        # print('childrenEmbeddingHigherTran1')
-        # print(childrenEmbeddingHigherTran1)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('childrenEmbeddingLowerTran1')
+            print(childrenEmbeddingLowerTran1)
+            print('childrenEmbeddingHigherTran1')
+            print(childrenEmbeddingHigherTran1)
         childrenEmbeddingLowerTran2 = torch.repeat_interleave(childrenEmbeddingLower.t(), repeats=nodesNum, dim=0)
         childrenEmbeddingHigherTran2 = torch.repeat_interleave(childrenEmbeddingHigher.t(), repeats=nodesNum, dim=0)
-        # print('childrenEmbeddingLowerTran2')
-        # print(childrenEmbeddingLowerTran2)
-        # print('childrenEmbeddingHigherTran2')
-        # print(childrenEmbeddingHigherTran2)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('childrenEmbeddingLowerTran2')
+            print(childrenEmbeddingLowerTran2)
+            print('childrenEmbeddingHigherTran2')
+            print(childrenEmbeddingHigherTran2)
         maxLower = torch.where(childrenEmbeddingLowerTran1 > childrenEmbeddingLowerTran2, childrenEmbeddingLowerTran1,
                             childrenEmbeddingLowerTran2)
         minHigher = torch.where(childrenEmbeddingHigherTran1 < childrenEmbeddingHigherTran2, childrenEmbeddingHigherTran1,
                             childrenEmbeddingHigherTran2)
-        # print('maxLower')
-        # print(maxLower)
-        # print('minHigher')
-        # print(minHigher)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('maxLower')
+            print(maxLower)
+            print('minHigher')
+            print(minHigher)
         overlapPre = minHigher - maxLower
-        # print('overlapPre')
-        # print(overlapPre)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('overlapPre')
+            print(overlapPre)
         overlapFilter = torch.ones((nodesNum, nodesNum)) - torch.eye((nodesNum))
         overlapFilter = overlapFilter.repeat(self.singleDim, 1).to(self.device)
         overlap_ = torch.mul(overlapPre, overlapFilter)
-        # print('overlap_')
-        # print(overlap_)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('overlap_')
+            print(overlap_)
         overlapNumerator = torch.where(overlap_ > 0, overlap_, torch.Tensor([0]).to(self.device))
-        # print('overlapNumerator')
-        # print(overlapNumerator)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('overlapNumerator')
+            print(overlapNumerator)
         gapDiff = childrenEmbDiff.t().reshape(childrenEmbeddingLower.numel(), 1)
         gapDiff = HierarchyModel.clip_by_min(gapDiff)
-        # print('gapDiff')
-        # print(gapDiff)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('gapDiff')
+            print(gapDiff)
         overlap = torch.div(overlapNumerator, gapDiff)
-        # print('overlap')
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('overlap')
+            print(overlap)
+            print('lossOverlap:')
+        # overlap = torch.abs(torch.tan(torch.mul(overlap, math.pi / 2.01)))
+        # overlap = HierarchyModel.clip_by_max(overlap,ma=5)
+        # print(childrenEmbDiff)
         # print(overlap)
-        # print('lossOverlap:')
         lossOverlap = overlap.sum()
-        # print(lossOverlap)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print(lossOverlap)
         # Calculate the penalty for the shape-like part.
         resEmbDiff = resEmbHigher - resEmbLower
         # Expand the parentDiff
@@ -226,45 +284,53 @@ class HierarchyModel(nn.Module):
             dim=0,
             index=torch.tensor(correspondingParentsIds).to(self.device)
         )
-        # print('shapeLike:')
-        # print('correspondingParentsEmbDiff')
-        # print(correspondingParentsEmbDiff)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('shapeLike:')
+            print('correspondingParentsEmbDiff')
+            print(correspondingParentsEmbDiff)
 
         numeratorShapeLike = HierarchyModel.clip_by_min(torch.div(childrenEmbDiff, correspondingParentsEmbDiff))
-        # print(numeratorShapeLike)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print(numeratorShapeLike)
         denominatorShapeLike = torch.index_select(
             self.eachNodeLeavesNum,
             dim=0,
             index=idIndexes
         )
-        # print('denominatorShapeLike')
+
         denominatorShapeLike = denominatorShapeLike.unsqueeze(1)
-        # print(denominatorShapeLike)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('denominatorShapeLike')
+            print(denominatorShapeLike)
 
         shapeLikeDiv = torch.div(numeratorShapeLike, denominatorShapeLike)
-        # print('shapeLikeDiv')
-        # print(shapeLikeDiv)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('shapeLikeDiv')
+            print(shapeLikeDiv)
 
-        # lossShapeLike = 100 * torch.add(shapeLikeDiv,-1)**2
-        # lossShapeLike = torch.abs(torch.log(shapeLikeDiv))
+
         shapeLikeDiv = HierarchyModel.clip_by_max(shapeLikeDiv, ma=math.pi * 0.49999)
         lossShapeLike = torch.abs(torch.tan(torch.mul(torch.add(shapeLikeDiv, -1),math.pi / 2)))
 
-        # print('lossShapeLike')
-        # print(lossShapeLike)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('lossShapeLike')
+            print(lossShapeLike)
         lossShapeLike = HierarchyModel.clip_by_max(lossShapeLike).sum()
-        # print('lossShapeLike')
-        # print(lossShapeLike)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('lossShapeLike')
+            print(lossShapeLike)
 
         # Calculate the distance similarity
-        # print('distance')
-        # print('currentLayerDistance')
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('distance')
+            print('currentLayerDistance')
 
         currentLayerDistance = self.calcLowerBoundDist(childrenEmbeddingLower, needSum=True)
-        # print(currentLayerDistance)
-        #
-        # print('accumulated layer dist')
-        # print(self.layerBasedRes)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print(currentLayerDistance)
+
+            print('accumulated layer dist')
+            print(self.layerBasedRes)
 
         correspondingAccumulatedDist = torch.index_select(
             self.layerBasedRes[self.curLayer],
@@ -279,10 +345,12 @@ class HierarchyModel(nn.Module):
         )
 
         realDistance = correspondingAccumulatedDist + currentLayerDistance
-        # print(realDistance)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print(realDistance)
         realDistanceNormed = torch.norm(realDistance)
-        # print('realDistanceNormed')
-        # print(realDistanceNormed)
+        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('realDistanceNormed')
+            print(realDistanceNormed)
         distNormed = torch.div(realDistance, HierarchyModel.clip_by_min(realDistanceNormed))
         distNormed = torch.sum(distNormed, dim=0)
 
@@ -307,7 +375,8 @@ class HierarchyModel(nn.Module):
             print('lossExceed:%f' % lossExceed)
             print('lossOverlap:%f' % lossOverlap)
             print('lossPositive:%f' % lossPositive)
-
+            if self.debug_layer == self.curLayer and epoch > self.debug_epoch:
+                exit(1)
 
 
         loss = \
