@@ -18,3 +18,6 @@ a = torch.tensor([[130.31836, 137.29929],
 
 b = a + 20*math.pi
 print(b)
+
+c = 2 * math.pi * 100
+print(c)

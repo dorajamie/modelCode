@@ -16,8 +16,8 @@ class HierarchyModel(nn.Module):
     def __init__(self,layer,omega,args,childrenList,parentsList,res,device,parentDict,layerBasedRes, tree):
         super(HierarchyModel, self).__init__()
 
-        self.debug_layer = 1
-        self.debug_epoch = 70000
+        self.debug_layer = 9
+        self.debug_epoch = 100
 
         self.args = args
         self.tree = tree
@@ -37,24 +37,24 @@ class HierarchyModel(nn.Module):
         self.childrenNumOfEachParent = []
 
         # Calculate the leaf children number of each node in this layer.
-        eachNodeLeavesNum = []
+        self.eachNodeLeavesNumCounter = []
         for child in childrenList:
-            eachNodeLeavesNum.append(len(tree[child].leaves))
+            self.eachNodeLeavesNumCounter.append(len(tree[child].leaves))
 
         correspondingAllParentsIds = list(itemgetter(*childrenList)(parentDict))
         eachNodeParentLeavesNum = []
         for parent in correspondingAllParentsIds:
             eachNodeParentLeavesNum.append(len(tree[parent].leaves))
 
-        eachNodeLeavesNumRatio = torch.div(torch.Tensor(eachNodeLeavesNum), sum(eachNodeLeavesNum)).to(device)
+        self.eachNodeLeavesNumRatio = torch.div(torch.Tensor(self.eachNodeLeavesNumCounter), sum(self.eachNodeLeavesNumCounter)).to(device)
 
-        self.eachNodeLeavesNum = torch.div(torch.Tensor(eachNodeLeavesNum), torch.tensor(eachNodeParentLeavesNum)).to(device)
+        self.eachNodeLeavesNum = torch.div(torch.Tensor(self.eachNodeLeavesNumCounter), torch.tensor(eachNodeParentLeavesNum)).to(device)
 
-        initRangeForChildren = torch.mul(eachNodeLeavesNumRatio, self.circleRange).unsqueeze(1)
+        initRangeForChildren = torch.mul(self.eachNodeLeavesNumRatio, self.circleRange).unsqueeze(1).to(device)
 
         # Initialize the embedding of the next layer.
         for dim in range(self.singleDim):
-            layerLowerEmbeddingE = torch.zeros(self.childrenNodesNum, 1)
+            layerLowerEmbeddingE = torch.zeros(self.childrenNodesNum, 1).to(device)
             nn.init.uniform_(
                 tensor=layerLowerEmbeddingE,
                 a=(self.circleRange * (layer + 1)),

@@ -34,6 +34,10 @@ def parse_args(args=None):
     参数入口
     :param args:
     :return:
+    3-32
+    4-16
+    5-64
+    6-128
     """
     parser = argparse.ArgumentParser(
         description='Train the Archimedean Spiral Model'
@@ -123,7 +127,7 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
         if step % 100 == 0:
             lossNumeric = loss.item()
             print("Network layer:%d, iterator is %d, loss is:%f" % (curLayer, step, lossNumeric))
-            if abs(lossNumeric - preLoss) < 0.01:
+            if abs(lossNumeric - preLoss) < 1:
                 break
             else:
                 preLoss = lossNumeric
