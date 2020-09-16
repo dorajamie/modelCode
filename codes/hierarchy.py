@@ -3,21 +3,21 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import numpy as np
 import math
 
 import torch
 import torch.nn as nn
 from operator import itemgetter
-
+np.set_printoptions(threshold=100000000)
 
 
 class HierarchyModel(nn.Module):
     def __init__(self,layer,omega,args,childrenList,parentsList,res,device,parentDict,layerBasedRes, tree):
         super(HierarchyModel, self).__init__()
 
-        self.debug_layer = 9
-        self.debug_epoch = 100
+        self.debug_layer = 0
+        self.debug_epoch = 5400000
 
         self.args = args
         self.tree = tree
@@ -265,6 +265,7 @@ class HierarchyModel(nn.Module):
             print('gapDiff')
             print(gapDiff)
         overlap = torch.div(overlapNumerator, gapDiff)
+        # overlap = overlapNumerator
         if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
             print('overlap')
             print(overlap)
@@ -273,8 +274,39 @@ class HierarchyModel(nn.Module):
         # overlap = HierarchyModel.clip_by_max(overlap,ma=5)
         # print(childrenEmbDiff)
         # print(overlap)
-        lossOverlap = overlap.sum()
+        # if epoch % 100 == 0:
+        #     a = overlap
+        #     print(a.detach().numpy())
+        # overlapDragLower =
+
+        lowerA2HigherB = torch.abs(childrenEmbeddingLowerTran1 - childrenEmbeddingHigherTran2)
+        higherA2LowerB = torch.abs(childrenEmbeddingHigherTran1 - childrenEmbeddingLowerTran2)
+        overlapDrag = torch.where(lowerA2HigherB < higherA2LowerB, lowerA2HigherB, higherA2LowerB)
+        # overlapDrag = lowerA2HigherB
+        findSubset = torch.where(overlap == 1, overlap, torch.Tensor([0]))
+        findSubsetT = torch.cat(findSubset.t().chunk(self.singleDim, 1), 0)
+
+        tmp = torch.add(findSubsetT, findSubset)
+        selectedSubset = torch.mul(tmp, overlapDrag)
+        finalOverlap = torch.where(selectedSubset > 0, selectedSubset, overlap)
+        # lossOverlap = overlap.sum()
+        lossOverlap  = finalOverlap.sum()
         if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
+            print('lowerA2HigherB')
+            print(lowerA2HigherB)
+            print('overlapDrag')
+            print(overlapDrag)
+            print('findSubset')
+            print(findSubset)
+            print('findSubsetT')
+            print(findSubsetT)
+            print('tmp')
+            print(tmp)
+            print('selectedSubset')
+            print(selectedSubset)
+            print('finalOverlap')
+            print(finalOverlap)
+            print('lossOverlap')
             print(lossOverlap)
         # Calculate the penalty for the shape-like part.
         resEmbDiff = resEmbHigher - resEmbLower
@@ -289,33 +321,37 @@ class HierarchyModel(nn.Module):
             print('correspondingParentsEmbDiff')
             print(correspondingParentsEmbDiff)
 
+
+
         numeratorShapeLike = HierarchyModel.clip_by_min(torch.div(childrenEmbDiff, correspondingParentsEmbDiff))
-        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
-            print(numeratorShapeLike)
+
         denominatorShapeLike = torch.index_select(
             self.eachNodeLeavesNum,
             dim=0,
             index=idIndexes
         )
+        # shapeA = torch.div(childrenEmbDiff, correspondingParentsEmbDiff)
+
 
         denominatorShapeLike = denominatorShapeLike.unsqueeze(1)
-        if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
-            print('denominatorShapeLike')
-            print(denominatorShapeLike)
 
         shapeLikeDiv = torch.div(numeratorShapeLike, denominatorShapeLike)
         if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
-            print('shapeLikeDiv')
+            print(numeratorShapeLike)
+            print(denominatorShapeLike)
             print(shapeLikeDiv)
 
-
-        shapeLikeDiv = HierarchyModel.clip_by_max(shapeLikeDiv, ma=math.pi * 0.49999)
-        lossShapeLike = torch.abs(torch.tan(torch.mul(torch.add(shapeLikeDiv, -1),math.pi / 2)))
-
+        # print(shapeLikeDiv)
+        shapeLikeDiv = HierarchyModel.clip_by_max(shapeLikeDiv, ma=1.99, mi=0.01)
+        # print(shapeLikeDiv)
         if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
-            print('lossShapeLike')
-            print(lossShapeLike)
-        lossShapeLike = HierarchyModel.clip_by_max(lossShapeLike).sum()
+            print('after clamp:')
+            print(shapeLikeDiv)
+
+        lossShapeLike = torch.abs(torch.tan(torch.mul(torch.add(shapeLikeDiv, -1),math.pi / 2))).sum()
+
+
+        # lossShapeLike = HierarchyModel.clip_by_max(lossShapeLike).sum()
         if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
             print('lossShapeLike')
             print(lossShapeLike)
@@ -351,6 +387,8 @@ class HierarchyModel(nn.Module):
         if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
             print('realDistanceNormed')
             print(realDistanceNormed)
+            if epoch == self.debug_epoch +2:
+                exit(1)
         distNormed = torch.div(realDistance, HierarchyModel.clip_by_min(realDistanceNormed))
         distNormed = torch.sum(distNormed, dim=0)
 
@@ -386,6 +424,7 @@ class HierarchyModel(nn.Module):
             self.args.loss_overlap * lossOverlap + \
             self.args.loss_positive * lossPositive
 
+        # loss = self.args.loss_overlap * lossOverlap
 
         return loss
 

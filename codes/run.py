@@ -190,7 +190,7 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
             loss = treeLoss.item()
 
             print("Tree layer:%d, epoch is %d, loss is:%f" % (curLayer, epoch, loss))
-            if abs(loss - treePreLoss) < 0.00005:
+            if abs(loss - treePreLoss) < 0.00001:
                 embTmpRes = treeModel.childrenEmbedding.data.cpu()
                 for k in childrenList:
                     pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
@@ -203,7 +203,7 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
                 break
             else:
                 # if abs(loss - treePreLoss) < 0.01:
-                # for name, parms in treeModel.named_parameters():
+                # for name, parms in t reeModel.named_parameters():
                 #     # print('-->name:', name, '-->grad_requires:', parms.requires_grad, \
                 #     #       ' -->grad_value:', parms.grad)
                 #     print('grad:')

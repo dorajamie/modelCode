@@ -95,6 +95,7 @@ def get_leaves_similarity(graph):
 def transfer_to_matrix(graph):
     n = graph.number_of_nodes()
     mat = np.zeros([n, n])
+
     for e in graph.edges():
         mat[e[0]][e[1]] = 1
         mat[e[1]][e[0]] = 1
