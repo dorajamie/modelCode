@@ -3,9 +3,12 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import pprint
+
 import numpy as np
 import math
-
+from collections import Counter
 import torch
 import torch.nn as nn
 from operator import itemgetter
@@ -60,6 +63,9 @@ class HierarchyModel(nn.Module):
                 a=(self.circleRange * (layer + 1)),
                 b=(self.circleRange * (layer + 2))
             )
+            # nn.init.constant_(
+            #     layerLowerEmbeddingE,self.circleRange * (layer + 1)
+            # )
             if dim == 0:
                 layerLowerEmbedding = layerLowerEmbeddingE
             else:
@@ -70,6 +76,8 @@ class HierarchyModel(nn.Module):
 
         layerHigherEmbedding = layerLowerEmbedding + initRangeForChildren
 
+        self.childrenLowerEmbedding = nn.Parameter(layerLowerEmbedding, requires_grad=True)
+        self.childrenHigherEmbedding = nn.Parameter(layerHigherEmbedding, requires_grad=True)
 
         layerEmbedding = torch.cat((layerLowerEmbedding,layerHigherEmbedding),1)
         # print(layerEmbedding)
@@ -80,12 +88,16 @@ class HierarchyModel(nn.Module):
         #     a=(self.circleRange * (layer + 1) ),
         #     b=(self.circleRange * (layer + 2) )
         # )
+        #
         # nodeEmbeddingL, nodeEmbeddingH = torch.split(layerEmbedding, self.singleDim, dim=1)
         # # Make the higher is larger than the lower
         # nodeEmbeddingL = torch.where(nodeEmbeddingL < nodeEmbeddingH, nodeEmbeddingL, nodeEmbeddingH)
         # nodeEmbeddingH = torch.where(nodeEmbeddingL > nodeEmbeddingH, nodeEmbeddingL, nodeEmbeddingH)
         # layerEmbedding = torch.cat((nodeEmbeddingL, nodeEmbeddingH), dim=1)
-        self.childrenEmbedding = nn.Parameter(layerEmbedding, requires_grad=True)
+        # self.childrenEmbedding = nn.Parameter(layerEmbedding, requires_grad=True)
+
+        self.childrenEmbedding = torch.cat((self.childrenLowerEmbedding,self.childrenHigherEmbedding),1)
+
 
         # Initialize the layer-based-distance dict for previous layer.
         self.layerBasedRes = self.calcLayerBasedDist(layerBasedRes,self.res)
@@ -151,6 +163,13 @@ class HierarchyModel(nn.Module):
 
 
     def forward(self,idIndexes,omegaEmb,epoch):
+
+        if epoch % 2 == 0:
+            pass
+
+
+
+
         # The index order.
         # The original order.
         ids = [self.childrenList[i] for i in idIndexes]
@@ -175,6 +194,10 @@ class HierarchyModel(nn.Module):
             correspondingParentsIds = list(itemgetter(*ids)(self.parentDict))
         else:
             correspondingParentsIds = [self.parentDict[ids[0]]]
+
+        # correspondingParentsDistinctIds = list(set(correspondingParentsIds))
+        # parentShowCntDict = Counter(correspondingParentsIds)
+
 
         correspondingParentsEmbL = torch.index_select(
             resEmbLower,
@@ -283,14 +306,14 @@ class HierarchyModel(nn.Module):
         higherA2LowerB = torch.abs(childrenEmbeddingHigherTran1 - childrenEmbeddingLowerTran2)
         overlapDrag = torch.where(lowerA2HigherB < higherA2LowerB, lowerA2HigherB, higherA2LowerB)
         # overlapDrag = lowerA2HigherB
-        findSubset = torch.where(overlap == 1, overlap, torch.Tensor([0]))
+        findSubset = torch.where(overlap == 1, overlap, torch.Tensor([0]).to(self.device))
         findSubsetT = torch.cat(findSubset.t().chunk(self.singleDim, 1), 0)
 
         tmp = torch.add(findSubsetT, findSubset)
         selectedSubset = torch.mul(tmp, overlapDrag)
         finalOverlap = torch.where(selectedSubset > 0, selectedSubset, overlap)
-        # lossOverlap = overlap.sum()
-        lossOverlap  = finalOverlap.sum()
+        lossOverlap = overlap.sum()
+        # lossOverlap  = finalOverlap.sum()
         if self.curLayer == self.debug_layer and epoch > self.debug_epoch:
             print('lowerA2HigherB')
             print(lowerA2HigherB)
@@ -403,6 +426,31 @@ class HierarchyModel(nn.Module):
         lossDistance = torch.norm(omegaDistNormed - distNormed)
 
         lossPositive = HierarchyModel.clip_by_min(torch.exp(-1 * (childrenEmbDiff))).sum()
+        # gap_p_1 = childrenEmbeddingLower - correspondingParentsEmbL_
+        # gap_p_2 = correspondingParentsEmbH_ - childrenEmbeddingHigher
+        # lossPositive = torch.relu(gap_p_1).sum() + torch.relu(gap_p_2).sum()
+        # parentShowCntDict = {}
+        # for key in correspondingParentsIds:
+        #     parentShowCntDict[key] = parentShowCntDict.get(key, 0) + 1
+        # gapSingle = (correspondingParentsEmbDiff - childrenEmbDiff).sum(dim=0)
+        # minus = torch.zeros_like(gapSingle).to(self.device)
+        # for (k,v) in parentShowCntDict.items():
+        #     tmp = torch.index_select(
+        #         resEmbDiff,
+        #         dim=0,
+        #         index=torch.tensor([k]).to(self.device)
+        #     )
+        #     tmp = torch.mul(tmp, v-1)
+        #     minus = torch.add(minus, tmp)
+        # lossPositive = torch.relu(gapSingle - minus).sum()
+
+        if epoch % 1000 ==0:
+            for k in self.childrenList:
+                pprint.pprint(str(k) + '    ' + str(len(self.tree[k].leaves)))
+            pppp = self.childrenEmbedding
+            pprint.pprint(pppp.detach().numpy())
+            l, h = torch.split(pppp, self.args.single_dim_t, dim=1)
+            pprint.pprint(np.around((h - l).detach().numpy(), decimals=6))
 
         if epoch % 100 == 0:
             print('*****************************')
