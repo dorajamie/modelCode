@@ -162,9 +162,6 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
         collate_fn=lambda x: treeDataset.collate_fn(x, args.batch_size),
         drop_last=False
     )
-    # The tree iterator.
-    treeTrainingIterator = BidirectionalOneShotIterator(treeDataLoader)
-
 
     treeLearningRate = args.learning_rate
     treeOptimizer = torch.optim.Adam(
@@ -175,7 +172,7 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
     # Start training the tree in epochs.
     treePreLoss = float('inf')
 
-    for epoch in range(0, args.max_epoch):
+    for epoch in range(0,  args.max_epoch):
         for i, data in enumerate(treeDataLoader):
             idx = data[0].to(device)
             omega = data[1].to(device)
@@ -185,12 +182,15 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
             treeLoss = treeModel(idx, omega, epoch)
             treeLoss.backward()
             treeOptimizer.step()
+            # for name, parms in treeModel.named_parameters():
+            #     print('-->name:', name, '-->grad_requires:', parms.requires_grad, \
+            #       ' -->grad_value:', parms.grad)
 
         if epoch % 100 == 0:
             loss = treeLoss.item()
 
             print("Tree layer:%d, epoch is %d, loss is:%f" % (curLayer, epoch, loss))
-            if abs(loss - treePreLoss) < 0.00001:
+            if abs(loss - treePreLoss) < 0.001:
                 embTmpRes = treeModel.childrenEmbedding.data.cpu()
                 for k in childrenList:
                     pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
