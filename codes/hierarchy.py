@@ -52,8 +52,10 @@ class HierarchyModel(nn.Module):
         self.parentEmbedding = res[pnode]
         correspondingParentsEmbL,correspondingParentsEmbH = torch.chunk(self.parentEmbedding, 2, dim=0)
 
-        self.correspondingParentsEmbL_ = torch.add(correspondingParentsEmbL, self.circleRange)
-        self.correspondingParentsEmbH_ = torch.add(correspondingParentsEmbH, self.circleRange)
+        correspondingParentsEmbL = correspondingParentsEmbL.to(device)
+        correspondingParentsEmbH = correspondingParentsEmbH.to(device)
+        self.correspondingParentsEmbL_ = torch.add(correspondingParentsEmbL, self.circleRange).to(device)
+        self.correspondingParentsEmbH_ = torch.add(correspondingParentsEmbH, self.circleRange).to(device)
 
         self.parentRange = correspondingParentsEmbH - correspondingParentsEmbL
         # print(self.eachNodeLeavesNumRatio)
