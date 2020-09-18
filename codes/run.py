@@ -74,10 +74,10 @@ def parse_args(args=None):
 
 
 
-def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCounter, parentDict, layerBasedDict):
+def nodeWiseTraining(curNode, res, args, tree, leavesMatrix, device, layerCounter, parentDict, layerBasedDict):
     """
     Layer by layer training function.
-    :param curLayer:  current layer that to be trained
+    :param curNode:  current node that to be trained
     :param res:         the final results
     :param args:        the arguments in script
     :param tree:        the tree structure
@@ -86,111 +86,134 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
     :param layerCounter:    a dict that store the list of nodes of each layer
     :return:
     """
+    childrenList, simMatrix = etl.getNodesSimBasedOnLeavesSim(curNode, tree, leavesMatrix, 100)
     # Return the leaf level and needn't process.
-    if curLayer > len(layerCounter) - 2 :
-        return
-    print("Start training the network:"+str(curLayer)+"......")
-    parentList = layerCounter[curLayer]
-    childrenList = layerCounter[curLayer + 1]
+    if len(childrenList) < 2 :
+        res[childrenList[0]] = res[curNode] + args.single_dim_t
+    else:
+        print("Start training the network: Node: "+str(curNode)+"......")
 
-    # Calc the ground-truth of this layer, the simMatrix is in the order of childrenList.
-    simMatrix = etl.getLayerNodesSimBasedOnLeavesSim(leavesMatrix, childrenList, tree, 100)
-    simMatrixNorm = etl.normalizeMatrix(simMatrix)
-    # print('init network')
-    # Initialize the network model.
-    networkModel = NetworkModel(
-        children=childrenList,
-        args=args
-    )
-    # print('init dataset')
-    # Load the network training dataset.
-    networkDataLoader = DataLoader(
-        networkDataset(simMatrixNorm, args),
-        batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=max(1, args.cpu_num // 2),
-        collate_fn=lambda x: networkDataset.collate_fn(x, args.batch_size),
-        drop_last=False
-    )
-    # The network iterator.
-    networkTrainingIterator = BidirectionalOneShotIterator(networkDataLoader)
+        # Calc the ground-truth of this layer, the simMatrix is in the order of childrenList.
+        simMatrixNorm = etl.normalizeMatrix(simMatrix)
 
-    networkLearningRate = args.learning_rate
-    networkOptimizer = torch.optim.Adam(
-        filter(lambda p: p.requires_grad, networkModel.parameters()),
-        lr=networkLearningRate
-    )
-    # Start training the network.
-    preLoss = float('inf')
-    for step in range(0, args.max_steps):
-        loss, embeddingOmega = NetworkModel.train_step(networkModel, networkOptimizer, networkTrainingIterator)
-        if step % 100 == 0:
-            lossNumeric = loss.item()
-            print("Network layer:%d, iterator is %d, loss is:%f" % (curLayer, step, lossNumeric))
-            if abs(lossNumeric - preLoss) < 1:
-                break
-            else:
-                preLoss = lossNumeric
+        # Initialize the network model.
+        networkModel = NetworkModel(
+            children=childrenList,
+            args=args
+        )
+        # Load the network training dataset.
+        networkDataLoader = DataLoader(
+            networkDataset(simMatrixNorm, args, childrenList),
+            batch_size=args.batch_size,
+            shuffle=True,
+            num_workers=max(1, args.cpu_num // 2),
+            collate_fn=lambda x: networkDataset.collate_fn(x, args.batch_size),
+            drop_last=False
+        )
+        # The network iterator.
+        networkTrainingIterator = BidirectionalOneShotIterator(networkDataLoader)
 
-    # Start training the tree.
-    print("Start training the tree:" + str(curLayer) + "......")
-    # The medium omega is in the order of children list.
-    omega = embeddingOmega.data.numpy()
+        networkLearningRate = args.learning_rate
+        networkOptimizer = torch.optim.Adam(
+            filter(lambda p: p.requires_grad, networkModel.parameters()),
+            lr=networkLearningRate
+        )
+        # Start training the network.
+        preLoss = float('inf')
+        for step in range(0, args.max_steps):
+            loss, embeddingOmega = NetworkModel.train_step(networkModel, networkOptimizer, networkTrainingIterator)
+            if step % 100 == 0:
+                lossNumeric = loss.item()
+                print("Network layer:%d, iterator is %d, loss is:%f" % (curNode, step, lossNumeric))
+                if abs(lossNumeric - preLoss) < 1:
+                    break
+                else:
+                    preLoss = lossNumeric
 
-    treeModel = HierarchyModel(
-        layer = curLayer,
-        omega=omega,
-        res=res,
-        args=args,
-        childrenList=childrenList,
-        parentsList=parentList,
-        device=device,
-        parentDict = parentDict,
-        layerBasedRes = layerBasedDict,
-        tree = tree
-    )
+        # Start training the tree.
+        print("Start training the tree: Node: " + str(curNode) + "......")
+        # The medium omega is in the order of children list.
+        # print(embeddingOmega)
+        # exit(1)
+        omega = embeddingOmega.data.numpy()
 
-    treeModel.to(device)
-    treeModel.train()
+        treeModel = HierarchyModel(
+            pnode = curNode,
+            omega=omega,
+            res=res,
+            args=args,
+            childrenList=childrenList,
+            device=device,
+            parentDict = parentDict,
+            # layerBasedRes = layerBasedDict,
+            tree = tree
+        )
 
-    # Load the tree training dataset.
-    treeDataLoader = DataLoader(
-        treeDataset(omega, args),
-        batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=max(1, args.cpu_num // 2),
-        collate_fn=lambda x: treeDataset.collate_fn(x, args.batch_size),
-        drop_last=False
-    )
+        treeModel.to(device)
+        treeModel.train()
 
-    treeLearningRate = args.learning_rate
-    treeOptimizer = torch.optim.Adam(
-        filter(lambda p: p.requires_grad, treeModel.parameters()),
-        lr=treeLearningRate
-    )
+        # Load the tree training dataset.
+        treeDataLoader = DataLoader(
+            treeDataset(omega, args),
+            batch_size=args.batch_size,
+            shuffle=True,
+            num_workers=max(1, args.cpu_num // 2),
+            collate_fn=lambda x: treeDataset.collate_fn(x, args.batch_size),
+            drop_last=False
+        )
 
-    # Start training the tree in epochs.
-    treePreLoss = float('inf')
+        treeLearningRate = args.learning_rate
+        treeOptimizer = torch.optim.Adam(
+            filter(lambda p: p.requires_grad, treeModel.parameters()),
+            lr=treeLearningRate
+        )
 
-    for epoch in range(0,  args.max_epoch):
-        for i, data in enumerate(treeDataLoader):
-            idx = data[0].to(device)
-            omega = data[1].to(device)
-            # data = data.to(device)
-            # treeLossNumeric, embedding = treeModel.trainStep(treeModel, treeOptimizer, treeTrainingIterator, step)
-            treeOptimizer.zero_grad()
-            treeLoss = treeModel(idx, omega, epoch)
-            treeLoss.backward()
-            treeOptimizer.step()
-            # for name, parms in treeModel.named_parameters():
-            #     print('-->name:', name, '-->grad_requires:', parms.requires_grad, \
-            #       ' -->grad_value:', parms.grad)
+        # Start training the tree in epochs.
+        treePreLoss = float('inf')
 
-        if epoch % 100 == 0:
-            loss = treeLoss.item()
+        for epoch in range(0,  args.max_epoch):
+            for i, data in enumerate(treeDataLoader):
+                idx = data[0].to(device)
+                omega = data[1].to(device)
+                # data = data.to(device)
+                # treeLossNumeric, embedding = treeModel.trainStep(treeModel, treeOptimizer, treeTrainingIterator, step)
+                treeOptimizer.zero_grad()
+                treeLoss = treeModel(idx, omega, epoch)
+                treeLoss.backward()
+                treeOptimizer.step()
+                # for name, parms in treeModel.named_parameters():
+                #     print('-->name:', name, '-->grad_requires:', parms.requires_grad, \
+                #       ' -->grad_value:', parms.grad)
 
-            print("Tree layer:%d, epoch is %d, loss is:%f" % (curLayer, epoch, loss))
-            if abs(loss - treePreLoss) < 0.001:
+            if epoch % 100 == 0:
+                loss = treeLoss.item()
+
+                print("Tree node:%d, epoch is %d, loss is:%f" % (curNode, epoch, loss))
+                if abs(loss - treePreLoss) < 0.0005:
+                    embTmpRes = treeModel.childrenEmbedding.data.cpu()
+                    for k in childrenList:
+                        pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
+                    pprint.pprint(embTmpRes.numpy())
+                    l, h = torch.split(embTmpRes, args.single_dim_t, dim=1)
+                    pprint.pprint(np.around((h - l).numpy(), decimals=6))
+                    for indexer in range(len(childrenList)):
+                        child = childrenList[indexer]
+                        res[child] = embTmpRes[indexer]
+                    break
+                else:
+                    # if abs(loss - treePreLoss) < 0.01:
+                    # for name, parms in t reeModel.named_parameters():
+                    #     # print('-->name:', name, '-->grad_requires:', parms.requires_grad, \
+                    #     #       ' -->grad_value:', parms.grad)
+                    #     print('grad:')
+                    #     print(parms.grad)
+                    treePreLoss = loss
+
+
+
+
+            if epoch == args.max_epoch - 1:
+                # embTmpRes = treeModel.childrenEmbedding.data.cpu()
                 embTmpRes = treeModel.childrenEmbedding.data.cpu()
                 for k in childrenList:
                     pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
@@ -200,30 +223,6 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
                 for indexer in range(len(childrenList)):
                     child = childrenList[indexer]
                     res[child] = embTmpRes[indexer]
-                break
-            else:
-                # if abs(loss - treePreLoss) < 0.01:
-                # for name, parms in t reeModel.named_parameters():
-                #     # print('-->name:', name, '-->grad_requires:', parms.requires_grad, \
-                #     #       ' -->grad_value:', parms.grad)
-                #     print('grad:')
-                #     print(parms.grad)
-                treePreLoss = loss
-
-
-
-
-        if epoch == args.max_epoch - 1:
-            # embTmpRes = treeModel.childrenEmbedding.data.cpu()
-            embTmpRes = treeModel.childrenEmbedding.data.cpu()
-            for k in childrenList:
-                pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
-            pprint.pprint(embTmpRes.numpy())
-            l, h = torch.split(embTmpRes, args.single_dim_t, dim=1)
-            pprint.pprint(np.around((h - l).numpy(), decimals=6))
-            for indexer in range(len(childrenList)):
-                child = childrenList[indexer]
-                res[child] = embTmpRes[indexer]
 
     # Start training the tree.
     # treePreLoss = float('inf')
@@ -256,9 +255,11 @@ def layerWiseTraining(curLayer, res, args, tree, leavesMatrix, device, layerCoun
     #             child = childrenList[indexer]
     #             res[child] = embTmpRes[indexer]
 
+    for child in childrenList:
+        if tree[child].direct_children:
+            nodeWiseTraining(child, res, args, tree, leavesMatrix, device, layerCounter, parentDict, layerBasedDict)
 
 
-    layerWiseTraining(curLayer+1, res, args, tree, leavesMatrix, device, layerCounter, parentDict, layerBasedDict)
 
 def main(args):
     """
@@ -298,7 +299,9 @@ def main(args):
     res[root] = root_embedding
 
     # Initialize the layer dict containing lists of nodes of each layer.
+    # 每层所含节点数的list，[[2618], [2602, 2603, 2604, 2605, 2606, 2607, 2608, 2609, 2610, 2611, 2612, 2613, 2614, 2615, 2616, 2617], ....]
     layerCounter = [[] for i in range(total_level)]
+    # 每个节点的父节点dict
     parentDict = {}
     for node in tree:
         if node.id != root:
@@ -309,7 +312,7 @@ def main(args):
     layerBasedDict = {}
 
     # Train HASNE layer by layer, start from the 0(which the root locate in) layer.
-    layerWiseTraining(0, res, args, tree, leavesSimilarity, device, layerCounter, parentDict, layerBasedDict)
+    nodeWiseTraining(root, res, args, tree, leavesSimilarity, device, layerCounter, parentDict, layerBasedDict)
 
 
     res_output = os.path.join(args.res_path, "res_"+str(int(time.time())))

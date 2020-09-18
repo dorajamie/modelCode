@@ -56,19 +56,18 @@ class networkDataset(Dataset):
     """
     Define the dataset for network.
     """
-    def __init__(self,simMatrix, args):
+    def __init__(self,simMatrix, args, children):
         self.args = args
         self.simMatrix = simMatrix
         self.batchSize = self.args.batch_size
-        self.len = len(simMatrix)
-        # print('in init')
+        self.len = len(children)
+
 
     def __len__(self):
         return self.len
 
     # override __getitem__
     def __getitem__(self, idx):
-        # print('in dataset:'+str(idx))
         return idx, self.simMatrix[idx]
 
     @staticmethod

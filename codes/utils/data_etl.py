@@ -285,7 +285,7 @@ def normalizeMatrix(mat):
     """
     return mat / np.sum(mat, axis=1, keepdims=True)
 
-def getLayerNodesSimBasedOnLeavesSim(leavesMatrix, childrenList, tree, scalingFactor):
+def getNodesSimBasedOnLeavesSim(parent, tree, leavesMatrix, scalingFactor):
     """
     Calc the similarity of all the nodes in a layer.
     :param leavesMatrix:    the leaf nodes similarity matrix
@@ -295,7 +295,9 @@ def getLayerNodesSimBasedOnLeavesSim(leavesMatrix, childrenList, tree, scalingFa
     :return:    the similarity matrix
     """
     # Total nodes number of the child layer.
-    childrenNum = len(childrenList)
+    leavesNum = len(leavesMatrix)
+    children = list(tree[parent].direct_children)
+    childrenNum = len(children)
     # Initialize the result matrix.
     simMat = np.zeros([childrenNum, childrenNum])
 
@@ -304,9 +306,9 @@ def getLayerNodesSimBasedOnLeavesSim(leavesMatrix, childrenList, tree, scalingFa
             if i == j:
                 simMat[i][j] = 1
             else:
-                iLeaves = tree[childrenList[i]].leaves  # all the leaf children of i
+                iLeaves = tree[children[i]].leaves  # all the leaf children of i
                 iLen = len(iLeaves)
-                jLeaves = tree[childrenList[j]].leaves  # all the leaf children of j
+                jLeaves = tree[children[j]].leaves  # all the leaf children of j
                 jLen = len(jLeaves)
 
                 mat = np.zeros([iLen, jLen])
@@ -324,4 +326,4 @@ def getLayerNodesSimBasedOnLeavesSim(leavesMatrix, childrenList, tree, scalingFa
                 tune = round(diff / scalingFactor, 4)
                 denominator = math.exp(tune)
                 simMat[i][j] = simMat[j][i] = numerator / denominator
-    return simMat
+    return children, simMat
