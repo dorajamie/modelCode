@@ -188,18 +188,18 @@ class Metric(object):
                 xx.append(x)
                 yy.append(y)
                 tmp += math.pi * 0.0001
-            ax.plot(xx, yy, label='debug', linewidth=2)
+            ax.plot(xx, yy, label='debug', linewidth=8)
 
         plt.show()
 
-        pp = PdfPages(pdf_output)
-        pp.savefig(fig)
-        pp.close()
+        # pp = PdfPages(pdf_output)
+        # pp.savefig(fig)
+        # pp.close()
 
     @staticmethod
     def drawG():
-        graph = etl.prepare_graph('../data/tree2_mammal')
-        pdf_output = '../res/vis_mammal_defalut_better.pdf'
+        graph = etl.prepare_graph('../data/tree2_debug')
+        pdf_output = '../res/vis_debug_default.pdf'
         fig = plt.figure(figsize=(30, 30))
 
 
@@ -209,7 +209,7 @@ class Metric(object):
             with_labels=False,
             # pos = nx.random_layout(graph),
             node_size=100,
-            width=0.3,
+            width=1,
             node_color='b',
             edge_color='r'
         )
@@ -237,9 +237,9 @@ class Metric(object):
         #     # pos=nx.random_layout(G),
         # )
         # plt.show()
-        pp = PdfPages(pdf_output)
-        pp.savefig(fig)
-        pp.close()
+        # pp = PdfPages(pdf_output)
+        # pp.savefig(fig)
+        # pp.close()
 
     @staticmethod
     def drawPoincare():

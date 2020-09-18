@@ -8,6 +8,7 @@ from codes.utils.filewriter import write_to_file
 
 def metric(params):
     js = json.loads(open(params["res_input"]).read())
+    js = js['embedding']
     embedding = np.array(js)
     res_path = params["metric_output"]
 
@@ -46,13 +47,13 @@ def metric(params):
 
 
 if __name__ == "__main__":
-    inputFileName = 'res_1598626250'
+    inputFileName = 'res_1599900740'
     params = {
         'res_input':'../res/'+inputFileName,
         'metric_output':'../res/metric_'+inputFileName,
         'metric_function':[
             {
-                'metric_func':'drawG'
+                'metric_func':'visualization'
             },
         ],
     }
