@@ -185,7 +185,7 @@ def nodeWiseTraining(curNode, res, args, tree, leavesMatrix, device, layerCounte
                 #     print('-->name:', name, '-->grad_requires:', parms.requires_grad, \
                 #       ' -->grad_value:', parms.grad)
 
-            if epoch % 100 == 0:
+            if epoch % 96 == 0:
                 loss = treeLoss.item()
 
                 print("Tree node:%d, epoch is %d, loss is:%f" % (curNode, epoch, loss))

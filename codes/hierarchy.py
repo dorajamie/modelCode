@@ -79,9 +79,9 @@ class HierarchyModel(nn.Module):
                 layerLowerEmbedding = torch.cat((layerLowerEmbedding, layerLowerEmbeddingE), 1)
 
         layerHigherEmbedding = layerLowerEmbedding + initRangeForChildren
-        print(layerLowerEmbedding)
-        print(initRangeForChildren)
-        print(layerHigherEmbedding)
+        # print(layerLowerEmbedding)
+        # print(initRangeForChildren)
+        # print(layerHigherEmbedding)
         self.childrenLowerEmbedding = nn.Parameter(layerLowerEmbedding, requires_grad=True)
         self.childrenHigherEmbedding = nn.Parameter(layerHigherEmbedding, requires_grad=True)
 
@@ -275,7 +275,17 @@ class HierarchyModel(nn.Module):
 
         lossDistance = torch.norm(omegaDistNormed - distNormed)
 
-        lossPositive = HierarchyModel.clip_by_min(torch.exp(-1 * (childrenEmbDiff))).sum()
+        lossGap = torch.relu(self.parentRange * 1 - torch.sum(childrenEmbDiff, dim=0))
+
+        # lossPositive = HierarchyModel.clip_by_min(torch.exp(-1 * (childrenEmbDiff))).sum()
+        lossPositive = lossGap.sum()
+
+        # print(self.parentRange)
+        # print(childrenEmbDiff)
+        # print(torch.sum(childrenEmbDiff,dim=0))
+        # exit(1)
+
+
         # gap_p_1 = childrenEmbeddingLower - correspondingParentsEmbL_
         # gap_p_2 = correspondingParentsEmbH_ - childrenEmbeddingHigher
         # lossPositive = torch.relu(gap_p_1).sum() + torch.relu(gap_p_2).sum()
@@ -294,15 +304,15 @@ class HierarchyModel(nn.Module):
         #     minus = torch.add(minus, tmp)
         # lossPositive = torch.relu(gapSingle - minus).sum()
 
-        if epoch % 1000 ==0:
-            for k in self.childrenList:
-                pprint.pprint(str(k) + '    ' + str(len(self.tree[k].leaves)))
-            pppp = self.childrenEmbedding
-            pprint.pprint(pppp.detach().numpy())
-            l, h = torch.split(pppp, self.args.single_dim_t, dim=1)
-            pprint.pprint(np.around((h - l).detach().numpy(), decimals=6))
+        # if epoch % 1000 ==0:
+        #     for k in self.childrenList:
+        #         pprint.pprint(str(k) + '    ' + str(len(self.tree[k].leaves)))
+        #     pppp = self.childrenEmbedding
+        #     pprint.pprint(pppp.detach().numpy())
+        #     l, h = torch.split(pppp, self.args.single_dim_t, dim=1)
+        #     pprint.pprint(np.around((h - l).detach().numpy(), decimals=6))
 
-        if epoch % 100 == 0:
+        if epoch % 96 == 0:
             print('*****************************')
             print('epoch:'+str(epoch))
             print('loss:'+str(self.parent))
@@ -312,13 +322,19 @@ class HierarchyModel(nn.Module):
             print('lossOverlap:%f' % lossOverlap)
             print('lossPositive:%f' % lossPositive)
 
-
-        loss = \
-            self.args.loss_distance * lossDistance + \
-            self.args.loss_shape * lossShapeLike +  \
-            self.args.loss_exceed * lossExceed + \
-            self.args.loss_overlap * lossOverlap + \
-            self.args.loss_positive * lossPositive
+        mark = epoch % 3
+        if mark == 0 :
+            loss = self.args.loss_distance * lossDistance + self.args.loss_overlap * lossOverlap
+        elif mark == 1:
+            loss = self.args.loss_shape * lossShapeLike + self.args.loss_positive * lossPositive
+        else:
+            loss = self.args.loss_exceed * lossExceed
+        # loss = \
+        #     self.args.loss_distance * lossDistance + \
+        #     self.args.loss_shape * lossShapeLike +  \
+        #     self.args.loss_exceed * lossExceed + \
+        #     self.args.loss_overlap * lossOverlap + \
+        #     self.args.loss_positive * lossPositive
 
         return loss
 
