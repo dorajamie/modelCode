@@ -148,19 +148,19 @@ class HierarchyModel(nn.Module):
 
     def forward(self,idIndexes,omegaEmb,epoch):
 
-        if epoch % 2 == 0:
-            self.childrenLowerEmbedding.requires_grad_(True)
-            self.childrenHigherEmbedding.requires_grad_(False)
-        else:
-            self.childrenLowerEmbedding.requires_grad_(False)
-            self.childrenHigherEmbedding.requires_grad_(True)
-
-        # if epoch % 4 < 2:
+        # if epoch % 2 == 0:
         #     self.childrenLowerEmbedding.requires_grad_(True)
         #     self.childrenHigherEmbedding.requires_grad_(False)
         # else:
         #     self.childrenLowerEmbedding.requires_grad_(False)
         #     self.childrenHigherEmbedding.requires_grad_(True)
+
+        if epoch % 4 < 2:
+            self.childrenLowerEmbedding.requires_grad_(True)
+            self.childrenHigherEmbedding.requires_grad_(False)
+        else:
+            self.childrenLowerEmbedding.requires_grad_(False)
+            self.childrenHigherEmbedding.requires_grad_(True)
 
         self.childrenEmbedding = torch.cat((self.childrenLowerEmbedding, self.childrenHigherEmbedding), 1)
 
@@ -319,7 +319,7 @@ class HierarchyModel(nn.Module):
             l, h = torch.split(pppp, self.args.single_dim_t, dim=1)
             pprint.pprint(np.around((h - l).detach().numpy(), decimals=6))
 
-        if epoch % 96 == 0:
+        if epoch % 100 == 0:
             print('*****************************')
             print('epoch:'+str(epoch))
             print('loss:'+str(self.parent))
@@ -329,21 +329,21 @@ class HierarchyModel(nn.Module):
             print('lossOverlap:%f' % lossOverlap)
             print('lossPositive:%f' % lossPositive)
 
-        mark = epoch % 3
-        if mark == 0 :
-            loss = self.args.loss_distance * lossDistance + self.args.loss_overlap * lossOverlap
-        elif mark == 1:
-            loss = self.args.loss_shape * lossShapeLike + self.args.loss_positive * lossPositive
-        else:
-            loss = self.args.loss_exceed * lossExceed
-
-        # mark = epoch % 2
-        # if mark == 0:
-        #     loss = self.args.loss_distance * lossDistance + self.args.loss_overlap * lossOverlap + self.args.loss_exceed * lossExceed + self.args.loss_shape * lossShapeLike
-        # # elif mark == 1:
-        # #     loss = self.args.loss_shape * lossShapeLike + self.args.loss_positive * lossPositive
+        # mark = epoch % 3
+        # if mark == 0 :
+        #     loss = self.args.loss_distance * lossDistance + self.args.loss_overlap * lossOverlap
+        # elif mark == 1:
+        #     loss = self.args.loss_shape * lossShapeLike + self.args.loss_positive * lossPositive
         # else:
-        #     loss = self.args.loss_positive * lossPositive
+        #     loss = self.args.loss_exceed * lossExceed
+
+        mark = epoch % 2
+        if mark == 0:
+            loss = self.args.loss_distance * lossDistance + self.args.loss_overlap * lossOverlap + self.args.loss_exceed * lossExceed + self.args.loss_shape * lossShapeLike
+        # elif mark == 1:
+        #     loss = self.args.loss_shape * lossShapeLike + self.args.loss_positive * lossPositive
+        else:
+            loss = self.args.loss_positive * lossPositive
 
         # loss = \
         #     self.args.loss_distance * lossDistance + \

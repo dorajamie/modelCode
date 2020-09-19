@@ -87,6 +87,7 @@ def nodeWiseTraining(curNode, res, args, tree, leavesMatrix, device, layerCounte
     :return:
     """
     childrenList, simMatrix = etl.getNodesSimBasedOnLeavesSim(curNode, tree, leavesMatrix, 100)
+    layer = tree[curNode].level
     # Return the leaf level and needn't process.
     if len(childrenList) < 2 :
         res[childrenList[0]] = res[curNode] + args.single_dim_t
@@ -170,8 +171,9 @@ def nodeWiseTraining(curNode, res, args, tree, leavesMatrix, device, layerCounte
 
         # Start training the tree in epochs.
         treePreLoss = float('inf')
-
-        for epoch in range(0,  args.max_epoch):
+        # print(layer)
+        # exit(1)
+        for epoch in range(0,  args.max_epoch * (4 - layer)):
             for i, data in enumerate(treeDataLoader):
                 idx = data[0].to(device)
                 omega = data[1].to(device)
@@ -184,12 +186,14 @@ def nodeWiseTraining(curNode, res, args, tree, leavesMatrix, device, layerCounte
                 # for name, parms in treeModel.named_parameters():
                 #     print('-->name:', name, '-->grad_requires:', parms.requires_grad, \
                 #       ' -->grad_value:', parms.grad)
+            t = epoch % 100
+            if t ==0:
 
-            if epoch % 96 == 0:
+
                 loss = treeLoss.item()
 
                 print("Tree node:%d, epoch is %d, loss is:%f" % (curNode, epoch, loss))
-                if abs(loss - treePreLoss) < 0.0005:
+                if abs(loss - treePreLoss) < 0.0005 * layer:
                     embTmpRes = treeModel.childrenEmbedding.data.cpu()
                     for k in childrenList:
                         pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))
