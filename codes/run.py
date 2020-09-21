@@ -173,7 +173,7 @@ def nodeWiseTraining(curNode, res, args, tree, leavesMatrix, device, layerCounte
         treePreLoss = float('inf')
         # print(layer)
         # exit(1)
-        for epoch in range(0,  args.max_epoch * (4 - layer)):
+        for epoch in range(0,  args.max_epoch * ((4 - layer)**2)):
             for i, data in enumerate(treeDataLoader):
                 idx = data[0].to(device)
                 omega = data[1].to(device)
@@ -193,7 +193,8 @@ def nodeWiseTraining(curNode, res, args, tree, leavesMatrix, device, layerCounte
                 loss = treeLoss.item()
 
                 print("Tree node:%d, epoch is %d, loss is:%f" % (curNode, epoch, loss))
-                if abs(loss - treePreLoss) < 0.0005 * layer:
+                # if abs(loss - treePreLoss) < 0.0005 * layer:
+                if abs(loss - treePreLoss) < 0.05:
                     embTmpRes = treeModel.childrenEmbedding.data.cpu()
                     for k in childrenList:
                         pprint.pprint(str(k) + '    ' + str(len(tree[k].leaves)))

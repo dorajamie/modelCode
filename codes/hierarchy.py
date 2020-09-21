@@ -57,9 +57,8 @@ class HierarchyModel(nn.Module):
         self.correspondingParentsEmbL_ = torch.add(correspondingParentsEmbL, self.circleRange).to(device)
         self.correspondingParentsEmbH_ = torch.add(correspondingParentsEmbH, self.circleRange).to(device)
 
-        self.parentRange = correspondingParentsEmbH - correspondingParentsEmbL
-        # print(self.eachNodeLeavesNumRatio)
-        # print(self.parentRange)
+        self.parentRange = HierarchyModel.clip_by_min(correspondingParentsEmbH - correspondingParentsEmbL, m=1e-5)
+
         initRangeForChildren = torch.mul(self.eachNodeLeavesNumRatio.unsqueeze(1), self.parentRange).to(device)
 
         # Initialize the embedding of the next layer.
@@ -287,12 +286,6 @@ class HierarchyModel(nn.Module):
         # lossPositive = HierarchyModel.clip_by_min(torch.exp(-1 * (childrenEmbDiff))).sum()
         lossPositive = lossGap.sum()
 
-        # print(self.parentRange)
-        # print(childrenEmbDiff)
-        # print(torch.sum(childrenEmbDiff,dim=0))
-        # exit(1)
-
-
         # gap_p_1 = childrenEmbeddingLower - correspondingParentsEmbL_
         # gap_p_2 = correspondingParentsEmbH_ - childrenEmbeddingHigher
         # lossPositive = torch.relu(gap_p_1).sum() + torch.relu(gap_p_2).sum()
@@ -311,7 +304,7 @@ class HierarchyModel(nn.Module):
         #     minus = torch.add(minus, tmp)
         # lossPositive = torch.relu(gapSingle - minus).sum()
 
-        if epoch % 1000 ==0:
+        if epoch % 5000 ==0:
             for k in self.childrenList:
                 pprint.pprint(str(k) + '    ' + str(len(self.tree[k].leaves)))
             pppp = self.childrenEmbedding
